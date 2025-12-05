@@ -16,28 +16,28 @@ void print_bin_uint8(uint8_t x) {
         putchar( (x & (1u << i)) ? '1' : '0' );
     }
 }
-typedef enum {
-  FRMT_R, FRMT_I, FRMT_S, FRMT_B, FRMT_U, FRMT_J
-} InstructionFormat;
+/* typedef enum { */
+/*   FRMT_R, FRMT_I, FRMT_S, FRMT_B, FRMT_U, FRMT_J */
+/* } InstructionFormat; */
 
 typedef enum {
   ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
 } ArithmeticType;
 
-typedef struct {
-  uint8_t opcode;
-  uint8_t rd;
-    char rd_string[5];
-  uint8_t funct3;
-  uint8_t rs1;
-    char rs1_string[5];
-  uint8_t rs2;
-    char rs2_string[5];
-  uint8_t funct7;
-  int32_t imm;
-} DecodedInstruction;
+/* typedef struct { */
+/*   uint8_t opcode; */
+/*   uint8_t rd; */
+/*     char rd_string[5]; */
+/*   uint8_t funct3; */
+/*   uint8_t rs1; */
+/*     char rs1_string[5]; */
+/*   uint8_t rs2; */
+/*     char rs2_string[5]; */
+/*   uint8_t funct7; */
+/*   int32_t imm; */
+/* } DecodedInstruction; */
 
-int spacing = 5;
+/* int spacing = 5; */
 
 const char *registers[32] = {
     [0] = "zero", [1] = "ra",   [2] = "sp",   [3] = "gp",  [4] = "tp",
@@ -60,6 +60,7 @@ InstructionFormat get_format(uint8_t opcode) {
     case 0x37: return FRMT_U;
     case 0x17: return FRMT_U;
     case 0x6F: return FRMT_J;
+    case 0x73: return ECALL;
     default:
         return -1;
   }
@@ -169,7 +170,7 @@ DecodedInstruction disasm_i_type(uint32_t instruction) {
   decoded.rs1 = get_rs1(instruction);
   strcpy(decoded.rs1_string, registers[decoded.rs1]);
   // Sign extend 12-bit to 32-bit
-  decoded.imm = (int32_t)instruction >> 20;
+  decoded.imm = ((int32_t)instruction) >> 20;
   return decoded;
 }
 
@@ -192,10 +193,10 @@ void handle_i_type(DecodedInstruction i_type_instruction, char *output) {
     case 0x02:
       memcpy(result, "LW", 3);
       break;
-    case 0x03:
+    case 0x04:
       memcpy(result, "LBU", 4);
       break;
-    case 0x04:
+    case 0x05:
       memcpy(result, "LHU", 4);
       break;
     default:
@@ -228,6 +229,7 @@ void handle_i_type(DecodedInstruction i_type_instruction, char *output) {
       break;
     case 0x05:
       imm_5bit = 1;
+      // TODO - why??
         if ((i_type_instruction.imm >> 5) & 0x20) {
             memcpy(result, "SRAI", 5);}
         else memcpy(result, "SRLI", 5);
@@ -414,45 +416,47 @@ void handle_j_type(DecodedInstruction j_type_instruction, uint32_t addr, char* o
 void disassemble(uint32_t addr, uint32_t instruction, char *result, size_t buf_size, struct symbols *symbols) {
 
   // System call handling - for now
-  if (instruction == 0x73) {
-    strcpy(result, "ECALL");
-    return;
-  }
+  /* if (instruction == 0x73) { */
+  /*   strcpy(result, "ECALL"); */
+  /*   return; */
+  /* } */
 
   uint8_t opcode = instruction & 0x7F;
   InstructionFormat format = get_format(opcode);
   DecodedInstruction disassembled_instruction;
   switch (format) {
-    case FRMT_R:
-      disassembled_instruction = disasm_r_type(instruction);
-      handle_r_type(disassembled_instruction, result);
-      break;
-    case FRMT_I:
-      disassembled_instruction = disasm_i_type(instruction);
-      handle_i_type(disassembled_instruction, result);
-      break;
-    case FRMT_S:
-      disassembled_instruction = disasm_s_type(instruction);
-      handle_s_type(disassembled_instruction, result);
-      break;
-    case FRMT_B:
-      disassembled_instruction = disasm_b_type(instruction);
-      handle_b_type(disassembled_instruction, addr, result);
-      break;
-    case FRMT_U:
-      disassembled_instruction = disasm_u_type(instruction);
-      handle_u_type(disassembled_instruction, result);
-      break;
-    case FRMT_J:
-      disassembled_instruction = disasm_j_type(instruction);
-      handle_j_type(disassembled_instruction, addr, result);
-      break;
-    default:
-      strcpy(result, "Error in dissambly");
-      break;
+
+  case FRMT_R:
+    disassembled_instruction = disasm_r_type(instruction);
+    handle_r_type(disassembled_instruction, result);
+    break;
+  case FRMT_I:
+    disassembled_instruction = disasm_i_type(instruction);
+    handle_i_type(disassembled_instruction, result);
+    break;
+  case FRMT_S:
+    disassembled_instruction = disasm_s_type(instruction);
+    handle_s_type(disassembled_instruction, result);
+    break;
+  case FRMT_B:
+    disassembled_instruction = disasm_b_type(instruction);
+    handle_b_type(disassembled_instruction, addr, result);
+    break;
+  case FRMT_U:
+    disassembled_instruction = disasm_u_type(instruction);
+    handle_u_type(disassembled_instruction, result);
+    break;
+  case FRMT_J:
+    disassembled_instruction = disasm_j_type(instruction);
+    handle_j_type(disassembled_instruction, addr, result);
+    break;
+  case ECALL:
+    strcpy(result, "ECALL");
+    break;
+  default:
+    strcpy(result, "Error in dissambly");
+    break;
   }
-
-
 
   // Test for R-type instructions
   /* uint8_t opcode = instruction & 0x7F; */
