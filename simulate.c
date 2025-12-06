@@ -4,14 +4,25 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int printout = 0;
+int logging = 0;
+int instruction_count = 0;
 
 void printer(char* buffer) {
   if (printout) {
     printf("%s", buffer);
   }
 }
+
+#define LOG_INSTR(buf, size, line, addr, hex, instr, desc, jump) \
+    snprintf(buf, size, "%5d %3s %8x : %08X %-25s %-30s\n", \
+             line, (jump) ? "==>" : "  ", addr, hex, instr, desc)
+
+#define LOG_B_INSTR(buf, size, line, addr, hex, instr, desc) \
+    snprintf(buf, size, "%5d=>%7x : %-8x %-25s %-30s\n", \
+             line, addr, hex, instr, desc)
 
 int skipped = 0;
 typedef struct {
@@ -71,15 +82,15 @@ int SUB(int rs1, int rs2) {
 int SRA(int a, int b) {
   // TODO - implement sign extension to be sure
   // that this is arithmetic shift
-  int sign_bit = 0;
-  int output = a >> b;
-  if (a & 0x400) {
-    sign_bit = 1;
-    int sign_extension = 1;
-    for (int i = 1; i<=b; i++) {
-      sign_extension *= 2;
-    }
-  }
+  /* int sign_bit = 0; */
+  /* int output = a >> b; */
+  /* if (a & 0x400) { */
+  /*   sign_bit = 1; */
+  /*   int sign_extension = 1; */
+  /*   for (int i = 1; i<=b; i++) { */
+  /*     sign_extension *= 2; */
+  /*   } */
+  /* } */
   return a >> b;
 }
 
@@ -433,25 +444,114 @@ int execute_ecall() {
 int advance_addr(int addr, int step) {
   return addr + step;
 }
+int log_instruction_start(int instruction_count, int addr, int instruction, FILE *log_file) {
+
+  if (!logging) {
+    // Logging turned off
+    return -1;
+  }
+
+  char buffer[200];
+  char disassembly[100];
+  disassemble(addr, instruction, disassembly, 100, NULL);
+  int bytes_written = snprintf(buffer, 200, "%-5d %8x : %08X       %s", instruction_count, addr, instruction, disassembly);
+  //int bytes_written = strlen(buffer);
+  //int bytes_written = snprintf(buffer, 100, "%d   %x   %8x     ", instruction_count, addr, instruction);
+  fwrite(buffer, 1, bytes_written, log_file);
+  return bytes_written;
+}
+
+int log_instruction(int instruction_count, int addr, int instruction, DecodedInstruction decoded_instruction, int jump_flag, FILE *log_file, void* data) {
+  // TODO - check if data is NULL, and handle or implement more robust solution
+  if (!logging) {
+    // Logging turned off
+    return -1;
+  }
+
+  char disassembly[100];
+  disassemble(addr, instruction, disassembly, 100, NULL);
+  char buffer[200];
+  memset(buffer, 0, sizeof(buffer));
+
+  InstructionFormat format = get_format(decoded_instruction.opcode);
+  int bytes_written = 0;
+
+  switch (format) {
+  case FRMT_R:
+  case FRMT_I:
+  case FRMT_U:
+    {
+      int result = *(int*) data;
+      char description[30];
+      snprintf(description, 30, "          R[%2d] <- %x", decoded_instruction.rd, result);
+      bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, disassembly, description, jump_flag);
+    break;
+    }
+  case FRMT_S:
+    {
+      int store_data = register_file[decoded_instruction.rs1];
+      int store_addr = register_file[decoded_instruction.rs2] + decoded_instruction.imm;
+      char memory[55];
+      snprintf(memory, 55, "                   %x -> Mem[%x]", store_data, store_addr);
+      bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, disassembly, memory, jump_flag);
+    break;
+    }
+  case FRMT_B:
+    {
+      char jump[10];
+      B_return result = *(B_return*) data;
+      if (result.branch) {
+        snprintf(jump, 10, "     {T}");
+      } else {
+        snprintf(jump, 10, "     {_}");
+      }
+      bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, disassembly, jump, jump_flag);
+    break;
+    }
+  case ECALL:
+  case FRMT_J:
+    {
+    char description[30];
+    snprintf(description, 30, "          R[%2d] <- %x", decoded_instruction.rd, addr+4);
+    bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, disassembly, description, jump_flag);
+    break;
+    }
+  default:
+    bytes_written = snprintf(buffer, 100, "\n");
+    break;
+  }
+  fwrite(buffer, 1, bytes_written, log_file);
+  return bytes_written;
+
+}
 
 struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct symbols *symbols) {
 
+  if (log_file != NULL) {
+    // Turn on logging only if log_file exists
+    logging = 1;
+
+    printf("Logging!\n");
+  }
+  int written = 0;
   // initialization
   DecodedInstruction decoded_instruction;
   struct Stat stat;
   stat.insns = 0;
   pc = start_addr;
   printf("Starting simulator at %x\n", pc);
+  //char* log_buffer = malloc(5000);
 
   // main execution of instructions
-
+  int jump_log_flag = 0;
   uint32_t instruction = memory_rd_w(mem, pc);
-  int instruction_count = 0;
-  int jumps = 0;
-  int terminate_address = 0x100e8;
+  //int instruction_count = 0;
+  /* int jumps = 0; */
+  /* int terminate_address = 0x100e8; */
   int terminate_execution = 0;
   while (instruction > 0 && !terminate_execution) {
     register_file[0] = 0;
+    /* log_instruction_start(instruction_count, pc, instruction, log_file); */
   /* while (instruction_count < 200) { */
 
     // Decode instruction
@@ -461,148 +561,173 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     /* printf("Address: %x\n", pc); */
     /* printf("Opcode: %x\n", opcode); */
 
-    char print_out[100];
-    disassemble(pc, instruction, print_out, 100, NULL);
-    if (printout) {
+    /* char print_out[100]; */
+    /* disassemble(pc, instruction, print_out, 100, NULL); */
+    /* if (printout) { */
 
 
-    printf("Instruction number: %d %8x : %08X       %s\n", instruction_count, pc, instruction, print_out);
-    printf("Jumps: %d\n", jumps);
-    printf("ra is %x\n", register_file[1]);
-    /* printf("Skipped instructions %d,\n", skipped); */
+    /* printf("Instruction number: %d %8x : %08X       %s\n", instruction_count, pc, instruction, print_out); */
+    /* printf("Jumps: %d\n", jumps); */
+    /* printf("ra is %x\n", register_file[1]); */
+    /* /\* printf("Skipped instructions %d,\n", skipped); *\/ */
 
-    }
+    //}
 
     switch (format) {
 
       // // R-type
     case FRMT_R:
+      {
       decoded_instruction = disasm_r_type(instruction);
-      printer("R-type \n");
-      if (printout) {
-      printf("Register[%d] is %d\n", decoded_instruction.rd,
-             register_file[decoded_instruction.rd]);
-      }
-      register_file[decoded_instruction.rd] =
-          execute_r_type(decoded_instruction);
+      /* printer("R-type \n"); */
+      /* if (printout) { */
+      /* printf("Register[%d] is %d\n", decoded_instruction.rd, */
+      /*        register_file[decoded_instruction.rd]); */
+      /* } */
+      int result = execute_r_type(decoded_instruction);
+      register_file[decoded_instruction.rd] = result;
 
-      if (printout) {
-      printf("Register[%d] is %d\n", decoded_instruction.rd,
-             register_file[decoded_instruction.rd]);
+      written += log_instruction(instruction_count, pc, instruction, decoded_instruction, jump_log_flag, log_file, &result);
+      jump_log_flag = 0;
 
-      }
+      /* if (printout) { */
+      /* printf("Register[%d] is %d\n", decoded_instruction.rd, */
+      /*        register_file[decoded_instruction.rd]); */
+
+      /* } */
       pc = advance_addr(pc, instruction_size);
       break;
+      }
 
       // I-type
     case FRMT_I:
+      {
       decoded_instruction = disasm_i_type(instruction);
-      printer("I-type \n");
+      /* printer("I-type \n"); */
 
-      if (printout) {
-      printf("Register[%d] is %d\n", decoded_instruction.rd,
-             register_file[decoded_instruction.rd]);
-      }
+      /* if (printout) { */
+      /* printf("Register[%d] is %d\n", decoded_instruction.rd, */
+      /*        register_file[decoded_instruction.rd]); */
+      /* } */
       // Execution and storage in register
       if (decoded_instruction.opcode == 0x67) {
         // If JALR
         // Execute
         JAL_return return_value = execute_JALR(decoded_instruction);
         register_file[return_value.rd] = advance_addr(pc, instruction_size);
+        written += log_instruction(instruction_count, pc, instruction, decoded_instruction, jump_log_flag, log_file, &return_value.jump_addr);
+        jump_log_flag = 1;
         // Update PC to jump
         pc = return_value.jump_addr;
        // printf("pc to jump to %x\n", pc);
-        jumps++;
+        /* jumps++; */
 
       } else {
         // If not JALR
-        //printf("Trying to do I\n");
-        int i_return = execute_i_type(decoded_instruction, mem);
-        //printf("rs1 %d, rd %d, imm %d, I return %d\n", decoded_instruction.rs1,
-        //       decoded_instruction.rd, decoded_instruction.imm, i_return);
-        register_file[decoded_instruction.rd] = i_return;
-        //printf("%d i_return %d\n", decoded_instruction.rd, i_return);
-            //execute_i_type(decoded_instruction, mem);
+        int result = execute_i_type(decoded_instruction, mem);
+        register_file[decoded_instruction.rd] = result;
+
+        written += log_instruction(instruction_count, pc, instruction, decoded_instruction, jump_log_flag, log_file, &result);
+        jump_log_flag = 0;
         pc = advance_addr(pc, instruction_size);
       }
 
-      if (printout) {
-        printf("Register[%d] is %d\n", decoded_instruction.rd,
-               register_file[decoded_instruction.rd]);
-      }
-
+      /* if (printout) { */
+      /*   printf("Register[%d] is %d\n", decoded_instruction.rd, */
+      /*          register_file[decoded_instruction.rd]); */
+      /* } */
 
       break;
+      }
     case FRMT_S:
+      {
       decoded_instruction = disasm_s_type(instruction);
-      printer("S-type\n");
+      /* printer("S-type\n"); */
       // Execution
+      // Storing data to memory as a sideeffect
       int store_status = execute_s_type(decoded_instruction, mem);
+      written += log_instruction(instruction_count, pc, instruction, decoded_instruction, jump_log_flag, log_file, &store_status);
+      jump_log_flag = 0;
       // Advance instruction address
       pc = advance_addr(pc, instruction_size);
       break;
+      }
 
     case FRMT_B:
+      {
       decoded_instruction = disasm_b_type(instruction);
-      printer("B-type\n");
+      /* printer("B-type\n"); */
       // Execution
       B_return branch_result = execute_b_type(decoded_instruction, pc);
       // Advance or jump address
       if (branch_result.branch) {
         //printf("Branch address %x\n", branch_result.branch_addr);
+        written += log_instruction(instruction_count, pc, instruction, decoded_instruction, jump_log_flag, log_file, &branch_result);
+        jump_log_flag = 1;
         pc = branch_result.branch_addr;
-        jumps++;
+        /* jumps++; */
         /* if (pc == 0x100e4) { */
         /*   exit(0); */
         /* } */
       } else {
+        written += log_instruction(instruction_count, pc, instruction, decoded_instruction, jump_log_flag, log_file, &branch_result);
+        jump_log_flag = 0;
         pc = advance_addr(pc, instruction_size);
       }
+      // TODO - this looks like a segmentation fault waiting to happen with last argument...
       //printf("PC is %x\n", pc);
       break;
-
+      }
     case FRMT_U:
+      {
       decoded_instruction = disasm_u_type(instruction);
-      printer("U-type\n");
+      /* printer("U-type\n"); */
       // Execution
-      if (printout) {
-        printf("Register[%d] is %d\n", decoded_instruction.rd,
-             register_file[decoded_instruction.rd]);
-      }
-      register_file[decoded_instruction.rd] = execute_u_type(decoded_instruction, pc);
-      if (printout) {
-        printf("Register[%d] is %d\n", decoded_instruction.rd,
-             register_file[decoded_instruction.rd]);
-      }
+      /* if (printout) { */
+      /*   printf("Register[%d] is %d\n", decoded_instruction.rd, */
+      /*        register_file[decoded_instruction.rd]); */
+      /* } */
+      int result = execute_u_type(decoded_instruction, pc);
+      register_file[decoded_instruction.rd] = result;
+      /* if (printout) { */
+      /*   printf("Register[%d] is %d\n", decoded_instruction.rd, */
+      /*        register_file[decoded_instruction.rd]); */
+      /* } */
+      written += log_instruction(instruction_count, pc, instruction, decoded_instruction, jump_log_flag, log_file, &result);
+      jump_log_flag = 0;
       // Advance instruction address
       pc = advance_addr(pc, instruction_size);
       //printf("PC is %x\n", pc);
       break;
+      }
       // J-type
     case FRMT_J:
       decoded_instruction = disasm_j_type(instruction);
-      printer("J-type \n");
-      if (printout) {
-        printf("Register[%d] is %d\n", decoded_instruction.rd,
-             register_file[decoded_instruction.rd]);
-      }
+      /* printer("J-type \n"); */
+      /* if (printout) { */
+      /*   printf("Register[%d] is %d\n", decoded_instruction.rd, */
+      /*        register_file[decoded_instruction.rd]); */
+      /* } */
       // Execution and address update
       JAL_return return_values = execute_j_type(decoded_instruction, pc);
       // Save pc + 4 in rd-register
       register_file[return_values.rd] = advance_addr(pc, instruction_size);
       //printf("rd %d register saved %x\n", return_values.rd, register_file[return_values.rd]);
       //printf("PC is %x\n", pc);
+      written += log_instruction(instruction_count, pc, instruction, decoded_instruction, jump_log_flag, log_file, &return_values.jump_addr);
+      jump_log_flag = 1;
+      /* if (printout) { */
+      /* printf("Register[%d] is %d\n", decoded_instruction.rd, */
+      /*        register_file[decoded_instruction.rd]); */
+      /* printf("PC is %x\n", pc); */
+      /* } */
+      /* jumps++; */
       pc = return_values.jump_addr;
-      if (printout) {
-      printf("Register[%d] is %d\n", decoded_instruction.rd,
-             register_file[decoded_instruction.rd]);
-      printf("PC is %x\n", pc);
-      }
-      jumps++;
       break;
 
     case ECALL: {
       int ecall_status = execute_ecall();
+      written += log_instruction(instruction_count, pc, instruction, decoded_instruction, jump_log_flag, log_file, &ecall_status);
       if (ecall_status == -1) {
         terminate_execution = 1;
       }
@@ -611,7 +736,6 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     }
 
     default:
-      skipped++;
       pc = advance_addr(pc, instruction_size);
       break;
     }
@@ -619,22 +743,8 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     instruction = memory_rd_w(mem, pc);
     instruction_count++;
 
-
     stat.insns++;
   }
 
-  //InstructionFormat format = get_format(opcode);
-  /* if (opcode == FRMT_I) { */
-  /*   decoded_instruction = disasm_r_type(instruction); */
-  /*   ADDI(decoded_instruction.rd, decoded_instruction.rs1, decoded_instruction.imm); */
-  /*   printf("ADDI %s, %s, %d is %d\n", decoded_instruction.rd_string, decoded_instruction.rs1_string, decoded_instruction.imm, */
-  /*          register_file[decoded_instruction.rd]); */
-  /* } */
-  if (printout) {
-    for (int i = 0; i < 32; i++) {
-      printf("Register[%d] is %d\n", i, register_file[i]);
-      printf("\n");
-    }
-  }
   return stat;
 }
