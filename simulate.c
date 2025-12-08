@@ -36,6 +36,10 @@ typedef struct {
   PHTEntry entry_table[PHT_SIZE];
 } BimodalPredictor;
 
+typedef struct {
+  PHTEntry entry_table[PHT_SIZE];
+} PHT;
+
 jump_predictions_t NT_predictions = { .correct = 0, .wrong = 0};
 jump_predictions_t BTFNT_predictions = { .correct = 0, .wrong = 0};
 jump_predictions_t Bimodal_predictions = { .correct = 0, .wrong = 0};
@@ -520,10 +524,13 @@ int bimodal_branch_prediction(BimodalPredictor *prediction_table, uint32_t b_ins
   return prediction_table->entry_table[index].counter >= 2;
 }
 
-void update_bimodal_predictor(BimodalPredictor *prediction_table, uint32_t b_instruction_addr, int prediction_result) {
+uint32_t get_index(uint32_t addr) {
+  return (addr >> 2) & ((1 << PHT_BITS) - 1);
+}
+
+void update_pht(BimodalPredictor *prediction_table, uint32_t index, int prediction_result) {
 
   // Only use 4 LSB for addressing the prediction counter
-  uint32_t index = (b_instruction_addr >> 2) & ((PHT_BITS << 1) - 1);
 
   if (prediction_result) {
     if (prediction_table->entry_table[index].counter < 3) {
@@ -535,6 +542,46 @@ void update_bimodal_predictor(BimodalPredictor *prediction_table, uint32_t b_ins
     }
   }
 
+}
+
+void update_bimodal_predictor(BimodalPredictor *prediction_table,
+                              uint32_t b_instruction_addr,
+                              int prediction_result) {
+
+  uint32_t index = get_index(b_instruction_addr);
+
+  update_pht(prediction_table, index, prediction_result);
+}
+
+uint8_t update_GHR(uint8_t GHR, int prediction_result) {
+
+  return (GHR << 1) | (prediction_result & 1);
+}
+
+int gShare_prediction(uint8_t GHR, BimodalPredictor *gShare_PHT,
+                      uint32_t b_instruction_addr) {
+  uint32_t index = (b_instruction_addr >> 2) & ((PHT_BITS << 1) - 1);
+  index |= GHR;
+
+  // If no entry for index, create one
+  if (&gShare_PHT->entry_table[index] != NULL) {
+    PHTEntry new_entry;
+    new_entry.counter = 2;
+    gShare_PHT->entry_table[index] = new_entry;
+  }
+
+  return gShare_PHT->entry_table[index].counter >= 2;
+}
+
+void update_gShare_bimodal_predictor(uint8_t GHR, BimodalPredictor *gShare_PHT,
+                                     uint32_t b_instruction_addr,
+                                     int prediction_result) {
+
+
+  uint32_t index = get_index(b_instruction_addr);
+  index |= GHR;
+
+  update_pht(gShare_PHT, index, prediction_result);
 }
 
 struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct symbols *symbols) {
@@ -555,7 +602,13 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
   int jump_log_flag = 0;
   int terminate_execution = 0;
   // Data structures for jump prediction
+  // TODO - This can be kept op stack,
+  // maybe their entries should be free'd at end of function
+  // Bimodal predictions
   BimodalPredictor* bimodal_prediction_table = (BimodalPredictor*)malloc(sizeof(BimodalPredictor));
+  // gShare predictions
+  BimodalPredictor* gSharePHT = (BimodalPredictor*)malloc(sizeof(BimodalPredictor));
+  uint8_t GHR = 0;
 
   // Read first instruction
   uint32_t instruction = memory_rd_w(mem, pc);
@@ -656,14 +709,25 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
       B_return branch_result = execute_b_type(decoded_instruction, pc);
       // Branch prediction
       // Bimodal
-      int branch_prediction = bimodal_branch_prediction(bimodal_prediction_table, pc);
-      int prediction_accuracy = branch_prediction == branch_result.branch;
-      update_bimodal_predictor(bimodal_prediction_table, pc, prediction_accuracy);
+      int bimodal_prediction = bimodal_branch_prediction(bimodal_prediction_table, pc);
+      int bimodal_prediction_accuracy = bimodal_prediction == branch_result.branch;
+      update_bimodal_predictor(bimodal_prediction_table, pc, branch_result.branch);
+      // gShare
+      int gS_prediction = gShare_prediction(GHR, gSharePHT, pc);
+      int gS_prediction_accuracy = gS_prediction == branch_result.branch;
+      GHR = update_GHR(GHR, branch_result.branch);
+      update_gShare_bimodal_predictor(GHR, gSharePHT, pc, branch_result.branch);
 
-      if (prediction_accuracy) {
+
+      if (bimodal_prediction_accuracy) {
         Bimodal_predictions.correct++;
       } else {
         Bimodal_predictions.wrong++;
+      }
+      if (gS_prediction_accuracy) {
+        gShare_predictions.correct++;
+      } else {
+        gShare_predictions.wrong++;
       }
 
       if (branch_result.branch) {
@@ -789,10 +853,10 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     stat.insns++;
   }
 
-  printf("NT predictions: \n Right: %d  Wrong: %d", NT_predictions.correct, NT_predictions.wrong);
-  printf("BTFNT predictions: \n Right: %d  Wrong: %d", BTFNT_predictions.correct, BTFNT_predictions.wrong);
-  printf("Bimodal predictions: \n Right: %d  Wrong: %d", Bimodal_predictions.correct, Bimodal_predictions.wrong);
-  printf("gShare predictions: \n Right: %d  Wrong: %d", gShare_predictions.correct, gShare_predictions.wrong);
+  printf("NT predictions: \n Right: %d  Wrong: %d\n", NT_predictions.correct, NT_predictions.wrong);
+  printf("BTFNT predictions: \n Right: %d  Wrong: %d\n", BTFNT_predictions.correct, BTFNT_predictions.wrong);
+  printf("Bimodal predictions: \n Right: %d  Wrong: %d\n", Bimodal_predictions.correct, Bimodal_predictions.wrong);
+  printf("gShare predictions: \n Right: %d  Wrong: %d\n", gShare_predictions.correct, gShare_predictions.wrong);
 
   return stat;
 }
