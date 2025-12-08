@@ -10,14 +10,9 @@ int logging = 0;
 int instruction_count = 0;
 
 #define LOG_INSTR(buf, size, line, addr, hex, instr, desc, jump) \
-    snprintf(buf, size, "%5d %3s %8x : %08X %-25s %-30s\n", \
-             line, (jump) ? "==>" : "  ", addr, hex, instr, desc)
+    snprintf(buf, size, "%5d %3s %8x : %08X %-50s %10s %-30s\n", \
+             line, (jump) ? "==>" : "  ", addr, hex, instr, "", desc)
 
-#define LOG_B_INSTR(buf, size, line, addr, hex, instr, desc) \
-    snprintf(buf, size, "%5d=>%7x : %-8x %-25s %-30s\n", \
-             line, addr, hex, instr, desc)
-
-int skipped = 0;
 typedef struct {
   int rd;
   int jump_addr;
@@ -27,6 +22,24 @@ typedef struct {
   int branch;
   int branch_addr;
 } B_return;
+
+typedef struct {
+  int correct;
+  int wrong;
+} jump_predictions_t;
+
+typedef struct {
+  uint8_t counter;
+} PHTEntry;
+
+typedef struct {
+  PHTEntry entry_table[PHT_SIZE];
+} BimodalPredictor;
+
+jump_predictions_t NT_predictions = { .correct = 0, .wrong = 0};
+jump_predictions_t BTFNT_predictions = { .correct = 0, .wrong = 0};
+jump_predictions_t Bimodal_predictions = { .correct = 0, .wrong = 0};
+jump_predictions_t gShare_predictions = { .correct = 0, .wrong = 0};
 
 int32_t register_file[32] = {0};
 int pc = 0;
@@ -400,6 +413,7 @@ int execute_ecall() {
     exit_code = -1;
     break;
   default:
+    printf("ecall code %d\n", a7);
     printf("Unknown ecall\n");
     break;
   }
@@ -411,14 +425,16 @@ int advance_addr(int addr, int step) {
 }
 
 // Function for logging simulation to file
-int log_instruction(int instruction_count, int addr, int instruction, DecodedInstruction decoded_instruction, int jump_flag, FILE *log_file, void* data) {
+int log_instruction(int instruction_count, int addr, int instruction,
+                    DecodedInstruction decoded_instruction, int jump_flag,
+                    FILE *log_file, void *data, struct symbols *symbols) {
   if (!logging) {
     // Logging turned off
     return -1;
   }
 
   char disassembly[100];
-  disassemble(addr, instruction, disassembly, 100, NULL);
+  disassemble(addr, instruction, disassembly, 100, symbols);
   char buffer[200];
   memset(buffer, 0, sizeof(buffer));
 
@@ -464,13 +480,18 @@ int log_instruction(int instruction_count, int addr, int instruction, DecodedIns
     break;
   }
 
-  case ECALL:
   case FRMT_J: {
     char description[30];
     snprintf(description, 30, "          R[%2d] <- %x", decoded_instruction.rd,
              addr + 4);
     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction,
                               disassembly, description, jump_flag);
+    break;
+  }
+
+  case ECALL: {
+    bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction,
+                              disassembly, "", jump_flag);
     break;
   }
 
@@ -482,6 +503,37 @@ int log_instruction(int instruction_count, int addr, int instruction, DecodedIns
 
   fwrite(buffer, 1, bytes_written, log_file);
   return bytes_written;
+}
+
+int bimodal_branch_prediction(BimodalPredictor *prediction_table, uint32_t b_instruction_addr) {
+
+  // Only use 4 LSB for addressing the prediction counter
+  uint32_t index = (b_instruction_addr >> 2) & ((PHT_BITS << 1) - 1);
+
+  // If there's no entry, create one and assume it should be taken
+  if (&prediction_table->entry_table[index] == NULL) {
+    PHTEntry new_entry;// = malloc(sizeof(PHTEntry));
+    new_entry.counter = 2;
+    prediction_table->entry_table[index] = new_entry;
+  }
+
+  return prediction_table->entry_table[index].counter >= 2;
+}
+
+void update_bimodal_predictor(BimodalPredictor *prediction_table, uint32_t b_instruction_addr, int prediction_result) {
+
+  // Only use 4 LSB for addressing the prediction counter
+  uint32_t index = (b_instruction_addr >> 2) & ((PHT_BITS << 1) - 1);
+
+  if (prediction_result) {
+    if (prediction_table->entry_table[index].counter < 3) {
+      prediction_table->entry_table[index].counter++;
+    }
+  } else {
+    if (prediction_table->entry_table[index].counter > 0) {
+      prediction_table->entry_table[index].counter--;
+    }
+  }
 
 }
 
@@ -491,7 +543,6 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     // Turn on logging only if log_file exists
     logging = 1;
 
-    printf("Logging!\n");
   }
   int written = 0;
 
@@ -503,10 +554,11 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
   // Flags for logging and termination of simulation
   int jump_log_flag = 0;
   int terminate_execution = 0;
+  // Data structures for jump prediction
+  BimodalPredictor* bimodal_prediction_table = (BimodalPredictor*)malloc(sizeof(BimodalPredictor));
 
   // Read first instruction
   uint32_t instruction = memory_rd_w(mem, pc);
-
   // Main execution loop for instructions.
   while (instruction > 0 && !terminate_execution) {
     register_file[0] = 0;
@@ -529,9 +581,8 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
       // Log
       written += log_instruction(instruction_count, pc, instruction,
                                  decoded_instruction, jump_log_flag, log_file,
-                                 &result);
+                                 &result, symbols);
       jump_log_flag = 0;
-
       // Advance pc
       pc = advance_addr(pc, instruction_size);
       break;
@@ -552,7 +603,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
         // Log
         written += log_instruction(instruction_count, pc, instruction,
                                    decoded_instruction, jump_log_flag, log_file,
-                                   &return_value.jump_addr);
+                                   &return_value.jump_addr, symbols);
         jump_log_flag = 1;
 
         // Update PC to jump
@@ -566,7 +617,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
         // Log
         written += log_instruction(instruction_count, pc, instruction,
                                    decoded_instruction, jump_log_flag, log_file,
-                                   &result);
+                                   &result, symbols);
         jump_log_flag = 0;
 
         // Advance pc
@@ -587,7 +638,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
       // Log
       written += log_instruction(instruction_count, pc, instruction,
                                  decoded_instruction, jump_log_flag, log_file,
-                                 &store_status);
+                                 &store_status, symbols);
       jump_log_flag = 0;
 
       // Advance instruction address
@@ -603,26 +654,59 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
 
       // Execution
       B_return branch_result = execute_b_type(decoded_instruction, pc);
+      // Branch prediction
+      // Bimodal
+      int branch_prediction = bimodal_branch_prediction(bimodal_prediction_table, pc);
+      int prediction_accuracy = branch_prediction == branch_result.branch;
+      update_bimodal_predictor(bimodal_prediction_table, pc, prediction_accuracy);
+
+      if (prediction_accuracy) {
+        Bimodal_predictions.correct++;
+      } else {
+        Bimodal_predictions.wrong++;
+      }
 
       if (branch_result.branch) {
+        // Branch condition true, jump
         // Log
         written += log_instruction(instruction_count, pc, instruction,
                                    decoded_instruction, jump_log_flag, log_file,
-                                   &branch_result);
+                                   &branch_result, symbols);
         jump_log_flag = 1;
+        // Branch prediction
+        // NT - Always predict not taken
+        NT_predictions.wrong++;
+        // BTFNT - Backwards jump predicted, forwards not predicted taken.
+        if (pc < branch_result.branch_addr) {
+          BTFNT_predictions.correct++;
+        } else {
+          BTFNT_predictions.wrong++;
+        }
 
-        // // Advance or jump address
+        // Update pc to jump address
         pc = branch_result.branch_addr;
 
       } else {
+        // Branch condition not true, no jump
         // Log
         written += log_instruction(instruction_count, pc, instruction,
                                    decoded_instruction, jump_log_flag, log_file,
-                                   &branch_result);
+                                   &branch_result, symbols);
         jump_log_flag = 0;
 
-        // Advance or jump address
+        // Advance address - no jump
         pc = advance_addr(pc, instruction_size);
+
+        // // Branch prediction
+        // NT - Awlays predict not taken
+        NT_predictions.correct++;
+        // BTFNT - Backwards jump predicted, forwards not predicted taken.
+        if (pc < branch_result.branch_addr) {
+          BTFNT_predictions.wrong++;
+        } else {
+          BTFNT_predictions.correct++;
+        }
+
       }
       break;
       }
@@ -638,7 +722,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
       // Log
       written += log_instruction(instruction_count, pc, instruction,
                                  decoded_instruction, jump_log_flag, log_file,
-                                 &result);
+                                 &result, symbols);
       jump_log_flag = 0;
 
       // Advance instruction address
@@ -661,7 +745,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
       // Log
       written += log_instruction(instruction_count, pc, instruction,
                                  decoded_instruction, jump_log_flag, log_file,
-                                 &return_values.jump_addr);
+                                 &return_values.jump_addr, symbols);
       jump_log_flag = 1;
 
       // Update pc
@@ -671,13 +755,16 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
 
       // ECALL
     case ECALL: {
+      // Decode (for logging)
+      decoded_instruction = disasm_ecall(instruction);
       // Execute
       int ecall_status = execute_ecall();
 
       // Log
+      /* printf("In ecall %x opcode\n", get_opcode(instruction)); */
       written += log_instruction(instruction_count, pc, instruction,
                                  decoded_instruction, jump_log_flag, log_file,
-                                 &ecall_status);
+                                 &ecall_status, symbols);
 
       if (ecall_status == -1) {
         // Terminate if ecall returns status -1
@@ -701,6 +788,11 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
 
     stat.insns++;
   }
+
+  printf("NT predictions: \n Right: %d  Wrong: %d", NT_predictions.correct, NT_predictions.wrong);
+  printf("BTFNT predictions: \n Right: %d  Wrong: %d", BTFNT_predictions.correct, BTFNT_predictions.wrong);
+  printf("Bimodal predictions: \n Right: %d  Wrong: %d", Bimodal_predictions.correct, Bimodal_predictions.wrong);
+  printf("gShare predictions: \n Right: %d  Wrong: %d", gShare_predictions.correct, gShare_predictions.wrong);
 
   return stat;
 }

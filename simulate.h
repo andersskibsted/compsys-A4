@@ -5,6 +5,9 @@
 #include "read_elf.h"
 #include <stdio.h>
 
+#define PHT_SIZE 256
+#define PHT_BITS 8
+
 // Simuler RISC-V program i givet lager og fra given start adresse
 struct Stat { long int insns; };
 

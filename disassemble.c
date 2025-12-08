@@ -153,7 +153,8 @@ void handle_r_type(DecodedInstruction r_type_instruction, char* output) {
       memcpy(result, "ERR", 4);
       break;
     }
-  sprintf(output, "%-10s %s, %s, %s",
+  sprintf(output, "%-20s %-10s %s, %s, %s",
+          "",
           result,
           r_type_instruction.rd_string,
           r_type_instruction.rs1_string,
@@ -245,13 +246,15 @@ void handle_i_type(DecodedInstruction i_type_instruction, char *output) {
       imm = i_type_instruction.imm & 31;
   }
   if (l_instruction) {
-    sprintf(output, "%-10s %s, %d(%s)",
+    sprintf(output, "%-20s %-10s %s, %d(%s)",
+            "",
             result,
             i_type_instruction.rd_string,
             imm,
             i_type_instruction.rs1_string);
   } else {
-    sprintf(output, "%-10s %s, %s, %d",
+    sprintf(output, "%-20s %-10s %s, %s, %d",
+            "",
             result,
             i_type_instruction.rd_string,
             i_type_instruction.rs1_string,
@@ -297,7 +300,8 @@ void handle_s_type(DecodedInstruction s_type_instruction, char* output) {
       break;
   }
 
-  sprintf(output, "%-10s %s, %d(%s)",
+  sprintf(output, "%-20s %-10s %s, %d(%s)",
+          "",
           result,
           s_type_instruction.rs2_string,
           s_type_instruction.imm,
@@ -354,7 +358,8 @@ void handle_b_type(DecodedInstruction b_type_instruction, uint32_t addr, char* o
     }
   int32_t branch_address = b_type_instruction.imm + (int32_t) addr;
 
-    sprintf(output, "%-10s %s, %s, %x",
+    sprintf(output, "%-20s %-10s %s, %s, %x",
+            "",
             result,
             b_type_instruction.rs1_string,
             b_type_instruction.rs2_string,
@@ -383,7 +388,7 @@ void handle_u_type(DecodedInstruction u_type_instruction, char* output) {
     memcpy(result, "AUIPC", 6);
   }
 
-  sprintf(output, "%-10s %s, 0x%x", result, u_type_instruction.rd_string, u_type_instruction.imm);
+  sprintf(output, "%-20s %-10s %s, 0x%x", "", result, u_type_instruction.rd_string, u_type_instruction.imm);
 }
 
 DecodedInstruction disasm_j_type(uint32_t instruction) {
@@ -408,22 +413,25 @@ void handle_j_type(DecodedInstruction j_type_instruction, uint32_t addr, char* o
     char result[4];
   memcpy(result, "JAL", 4);
   int32_t jump_address = j_type_instruction.imm + (int32_t) addr;
-  sprintf(output, "%-10s %s, %x", result, j_type_instruction.rd_string, jump_address);
+  sprintf(output, "%-20s %-10s %s, %x", "", result, j_type_instruction.rd_string, jump_address);
 }
 
+DecodedInstruction disasm_ecall(uint32_t instruction) {
+    DecodedInstruction decoded;
+
+    decoded.opcode = get_opcode(instruction);
+
+    return decoded;
+}
 
 
 void disassemble(uint32_t addr, uint32_t instruction, char *result, size_t buf_size, struct symbols *symbols) {
 
-  // System call handling - for now
-  /* if (instruction == 0x73) { */
-  /*   strcpy(result, "ECALL"); */
-  /*   return; */
-  /* } */
-
   uint8_t opcode = instruction & 0x7F;
   InstructionFormat format = get_format(opcode);
   DecodedInstruction disassembled_instruction;
+  const char* symbol = symbols_value_to_sym(symbols, addr);
+
   switch (format) {
 
   case FRMT_R:
@@ -451,30 +459,15 @@ void disassemble(uint32_t addr, uint32_t instruction, char *result, size_t buf_s
     handle_j_type(disassembled_instruction, addr, result);
     break;
   case ECALL:
-    strcpy(result, "ECALL");
+    sprintf(result, "%-20s %-10s", "", "ECALL");
     break;
   default:
-    strcpy(result, "Error in dissambly");
+    /* sprintf(result, "Error in dissambly"); */
     break;
   }
 
-  // Test for R-type instructions
-  /* uint8_t opcode = instruction & 0x7F; */
-  /* if (opcode == 0x33) { */
-  /*   DecodedInstruction r_type_instruction = decode_r_type(instruction); */
-  /*   if (r_type_instruction.funct3 == 0x00) { */
-  /*     // ADD or SUB */
-  /*     if (r_type_instruction.funct7 == 0x00 ) { */
-  /*       strcpy(result, "ADD\0"); */
-  /*     } else if (r_type_instruction.funct7 == 0x20) { */
-  /*       strcpy(result, "SUB\0"); */
-  /*     } */
-  /*   } else if (r_type_instruction.funct3 == 0x01) { */
-  /*     strcpy(result, "SLL\0"); */
-  /*   } else if (r_type_instruction.funct3 == 0x02) { */
-  /*     strcpy(result, "SLT\0"); */
-  /*   } */
-  /* } else { */
-  /*   strcpy(result, "ELSE\0"); */
-  /* } */
+  if (symbol != NULL) {
+      /* sprintf(result, "%s", symbol); */
+      memcpy(result, symbol, strlen(symbol));
+  }
 }
