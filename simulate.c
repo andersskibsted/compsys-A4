@@ -2,6 +2,7 @@
 #include "branch_predictor.h"
 #include "disassemble.h"
 #include "memory.h"
+#include "logging.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,24 +11,24 @@
 int logging = 0;
 int instruction_count = 0;
 
-#define LOG_INSTR(buf, size, line, addr, hex, instr, desc, jump) \
-    snprintf(buf, size, "%5d %3s %8x : %08X %-50s %10s %-30s\n", \
-             line, (jump) ? "==>" : "  ", addr, hex, instr, "", desc)
+/* #define LOG_INSTR(buf, size, line, addr, hex, instr, desc, jump) \ */
+/*     snprintf(buf, size, "%5d %3s %8x : %08X %-50s %10s %-30s\n", \ */
+/*              line, (jump) ? "==>" : "  ", addr, hex, instr, "", desc) */
 
-typedef struct {
-  int rd;
-  int jump_addr;
-} JAL_return;
+/* typedef struct { */
+/*   int rd; */
+/*   int jump_addr; */
+/* } JAL_return; */
 
-typedef struct {
-  int branch;
-  int branch_addr;
-} B_return;
+/* typedef struct { */
+/*   int branch; */
+/*   int branch_addr; */
+/* } B_return; */
 
-typedef struct {
-  int correct;
-  int wrong;
-} jump_predictions_t;
+/* typedef struct { */
+/*   int correct; */
+/*   int wrong; */
+/* } jump_predictions_t; */
 
 
 jump_predictions_t NT_predictions = { .correct = 0, .wrong = 0};
@@ -50,11 +51,6 @@ int pc = 0;
 
 const int instruction_size = 4;
 
-/* BimodalPredictor* initialize_bimodal_predictor(uint32_t size) { */
-/*   BimodalPredictor* new_PHT = malloc(sizeof(BimodalPredictor) + sizeof(PHTEntry) * size); */
-/*   new_PHT->size = size; */
-/*   return new_PHT; */
-/* } */
 
 // R-type instructions
 int ADD(int rs1, int rs2) {
@@ -434,161 +430,85 @@ int advance_addr(int addr, int step) {
   return addr + step;
 }
 
-// Function for logging simulation to file
-int log_instruction(int instruction_count, int addr, int instruction,
-                    DecodedInstruction decoded_instruction, int jump_flag,
-                    FILE *log_file, void *data, struct symbols *symbols) {
-  if (!logging) {
-    // Logging turned off
-    return -1;
-  }
-
-  char disassembly[100];
-  disassemble(addr, instruction, disassembly, 100, symbols);
-  char buffer[200];
-  memset(buffer, 0, sizeof(buffer));
-
-  InstructionFormat format = get_format(decoded_instruction.opcode);
-  int bytes_written = 0;
-
-  switch (format) {
-
-  case FRMT_R:
-  case FRMT_I:
-  case FRMT_U: {
-    int result = *(int *)data;
-    char description[30];
-    snprintf(description, 30, "          R[%2d] <- %x", decoded_instruction.rd,
-             result);
-    bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction,
-                              disassembly, description, jump_flag);
-    break;
-  }
-
-  case FRMT_S: {
-    int store_data = register_file[decoded_instruction.rs1];
-    int store_addr =
-        register_file[decoded_instruction.rs2] + decoded_instruction.imm;
-    char memory[55];
-    snprintf(memory, 55, "                   %x -> Mem[%x]", store_data,
-             store_addr);
-    bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction,
-                              disassembly, memory, jump_flag);
-    break;
-  }
-
-  case FRMT_B: {
-    char jump[10];
-    B_return result = *(B_return *)data;
-    if (result.branch) {
-      snprintf(jump, 10, "     {T}");
-    } else {
-      snprintf(jump, 10, "     {_}");
-    }
-    bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction,
-                              disassembly, jump, jump_flag);
-    break;
-  }
-
-  case FRMT_J: {
-    char description[30];
-    snprintf(description, 30, "          R[%2d] <- %x", decoded_instruction.rd,
-             addr + 4);
-    bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction,
-                              disassembly, description, jump_flag);
-    break;
-  }
-
-  case ECALL: {
-    bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction,
-                              disassembly, "", jump_flag);
-    break;
-  }
-
-  default: {
-    bytes_written = snprintf(buffer, 100, "\n");
-    break;
-  }
-  }
-
-  fwrite(buffer, 1, bytes_written, log_file);
-  return bytes_written;
-}
-
-/* uint32_t get_index(uint32_t addr, uint8_t number_of_bits) { */
-/*   return (addr >> 2) & ((1 << (number_of_bits)) - 1); */
-/* } */
-
-/* int bimodal_branch_prediction(BimodalPredictor *prediction_table, */
-/*                               uint32_t b_instruction_addr, */
-/*                               uint8_t number_of_bits) { */
-
-/*   uint32_t index = get_index(b_instruction_addr, number_of_bits); */
-
-/*   // If there's no entry, create one and assume it should be taken */
-/*   if (&prediction_table->entry_table[index] == NULL) { */
-/*     PHTEntry new_entry; // = malloc(sizeof(PHTEntry)); */
-/*     new_entry.counter = 2; */
-/*     prediction_table->entry_table[index] = new_entry; */
+/* // Function for logging simulation to file */
+/* int log_instruction(int instruction_count, int addr, int instruction, */
+/*                     DecodedInstruction decoded_instruction, int jump_flag, */
+/*                     FILE *log_file, void *data, struct symbols *symbols) { */
+/*   if (!logging) { */
+/*     // Logging turned off */
+/*     return -1; */
 /*   } */
 
-/*   return prediction_table->entry_table[index].counter >= 2; */
-/* } */
+/*   char disassembly[100]; */
+/*   disassemble(addr, instruction, disassembly, 100, symbols); */
+/*   char buffer[200]; */
+/*   memset(buffer, 0, sizeof(buffer)); */
 
-/* void update_pht(BimodalPredictor *prediction_table, uint32_t index, int prediction_result) { */
+/*   InstructionFormat format = get_format(decoded_instruction.opcode); */
+/*   int bytes_written = 0; */
 
-/*   // Only use 4 LSB for addressing the prediction counter */
+/*   switch (format) { */
 
-/*   if (prediction_result) { */
-/*     if (prediction_table->entry_table[index].counter < 3) { */
-/*       prediction_table->entry_table[index].counter++; */
+/*   case FRMT_R: */
+/*   case FRMT_I: */
+/*   case FRMT_U: { */
+/*     int result = *(int *)data; */
+/*     char description[30]; */
+/*     snprintf(description, 30, "          R[%2d] <- %x", decoded_instruction.rd, */
+/*              result); */
+/*     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, */
+/*                               disassembly, description, jump_flag); */
+/*     break; */
+/*   } */
+
+/*   case FRMT_S: { */
+/*     int store_data = register_file[decoded_instruction.rs1]; */
+/*     int store_addr = */
+/*         register_file[decoded_instruction.rs2] + decoded_instruction.imm; */
+/*     char memory[55]; */
+/*     snprintf(memory, 55, "                   %x -> Mem[%x]", store_data, */
+/*              store_addr); */
+/*     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, */
+/*                               disassembly, memory, jump_flag); */
+/*     break; */
+/*   } */
+
+/*   case FRMT_B: { */
+/*     char jump[10]; */
+/*     B_return result = *(B_return *)data; */
+/*     if (result.branch) { */
+/*       snprintf(jump, 10, "     {T}"); */
+/*     } else { */
+/*       snprintf(jump, 10, "     {_}"); */
 /*     } */
-/*   } else { */
-/*     if (prediction_table->entry_table[index].counter > 0) { */
-/*       prediction_table->entry_table[index].counter--; */
-/*     } */
+/*     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, */
+/*                               disassembly, jump, jump_flag); */
+/*     break; */
 /*   } */
 
-/* } */
-
-/* void update_bimodal_predictor(BimodalPredictor *prediction_table, */
-/*                               uint32_t b_instruction_addr, */
-/*                               int prediction_result, uint8_t number_of_bits) { */
-
-/*   uint32_t index = get_index(b_instruction_addr, number_of_bits); */
-
-/*   update_pht(prediction_table, index, prediction_result); */
-/* } */
-
-/* uint32_t update_GHR(uint32_t GHR, int branch_result, int number_of_bits) { */
-/*   uint32_t bit_mask = (1 << number_of_bits) - 1; */
-/*   return ((GHR << 1) | (branch_result & 1)) & bit_mask; */
-/* } */
-
-/* int gShare_prediction(uint8_t GHR, BimodalPredictor *gShare_PHT, */
-/*                       uint32_t b_instruction_addr, uint8_t number_of_bits) { */
-/*   uint32_t index = get_index(b_instruction_addr, number_of_bits); */
-/*   index |= GHR; */
-
-/*   // If no entry for index, create one */
-/*   if (&gShare_PHT->entry_table[index] != NULL) { */
-/*     PHTEntry new_entry; */
-/*     new_entry.counter = 2; */
-/*     gShare_PHT->entry_table[index] = new_entry; */
+/*   case FRMT_J: { */
+/*     char description[30]; */
+/*     snprintf(description, 30, "          R[%2d] <- %x", decoded_instruction.rd, */
+/*              addr + 4); */
+/*     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, */
+/*                               disassembly, description, jump_flag); */
+/*     break; */
 /*   } */
 
-/*   return gShare_PHT->entry_table[index].counter >= 2; */
-/* } */
+/*   case ECALL: { */
+/*     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, */
+/*                               disassembly, "", jump_flag); */
+/*     break; */
+/*   } */
 
-/* void update_gShare_bimodal_predictor(uint8_t GHR, BimodalPredictor *gShare_PHT, */
-/*                                      uint32_t b_instruction_addr, */
-/*                                      int prediction_result, uint8_t number_of_bits) { */
+/*   default: { */
+/*     bytes_written = snprintf(buffer, 100, "\n"); */
+/*     break; */
+/*   } */
+/*   } */
 
-
-/*   uint32_t index = get_index(b_instruction_addr, number_of_bits); */
-/*   index |= GHR; */
-
-/*   update_pht(gShare_PHT, index, prediction_result); */
+/*   fwrite(buffer, 1, bytes_written, log_file); */
+/*   return bytes_written; */
 /* } */
 
 struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct symbols *symbols) {
@@ -612,7 +532,6 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
   // TODO - This can be kept op stack,
   // maybe their entries should be free'd at end of function
   // Bimodal predictions
-  //BimodalPredictor* bimodal_prediction_table = (BimodalPredictor*)malloc(sizeof(BimodalPredictor));
   BimodalPredictor* bim_pht_256 = create_bimodal_predictor(8); // 8-bits
   BimodalPredictor* bim_pht_1024 = create_bimodal_predictor(10); // 10-bits
   BimodalPredictor* bim_pht_4096 = create_bimodal_predictor(12); // 12-bits
@@ -623,7 +542,8 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
   BimodalPredictor* gs_pht_1024 = create_bimodal_predictor(10);
   BimodalPredictor* gs_pht_4096 = create_bimodal_predictor(12);
   BimodalPredictor* gs_pht_16384 = create_bimodal_predictor(14);
-  /* BimodalPredictor* gSharePHT = (BimodalPredictor*)malloc(sizeof(BimodalPredictor)); */
+
+  // GHR shift registers
   uint8_t GHR_256 = 0;
   uint32_t GHR_1024 = 0;
   uint32_t GHR_4096 = 0;
@@ -911,7 +831,6 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
       int ecall_status = execute_ecall();
 
       // Log
-      /* printf("In ecall %x opcode\n", get_opcode(instruction)); */
       written += log_instruction(instruction_count, pc, instruction,
                                  decoded_instruction, jump_log_flag, log_file,
                                  &ecall_status, symbols);
@@ -939,44 +858,11 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     stat.insns++;
   }
 
-  printf("NT predictions: \nRight: %d  Wrong: %d\n", NT_predictions.correct, NT_predictions.wrong);
-  printf("Sum of predictions: %d. Total predictions: %d\n", NT_predictions.correct + NT_predictions.wrong, total_predictions);
-  printf("\n");
+  // Write jump predictions to log file
+  if (logging) {
+    log_jump_predictions(log_file, total_predictions);
+  }
 
-  printf("BTFNT predictions: \nRight: %d  Wrong: %d\n", BTFNT_predictions.correct, BTFNT_predictions.wrong);
-  printf("Sum of predictions: %d. Total predictions: %d\n", BTFNT_predictions.correct + BTFNT_predictions.wrong, total_predictions);
-  printf("\n");
-
-  printf("Bimodal 256 predictions: \nRight: %d  Wrong: %d\n", Bimodal_256_predictions.correct, Bimodal_256_predictions.wrong);
-  printf("Sum of predictions: %d. Total predictions: %d\n", Bimodal_256_predictions.correct + Bimodal_256_predictions.wrong, total_predictions);
-  printf("\n");
-
-  printf("Bimodal 1024 predictions: \nRight: %d  Wrong: %d\n", Bimodal_1024_predictions.correct, Bimodal_1024_predictions.wrong);
-  printf("Sum of predictions: %d. Total predictions: %d\n", Bimodal_1024_predictions.correct + Bimodal_1024_predictions.wrong, total_predictions);
-  printf("\n");
-
-  printf("Bimodal 4096 predictions: \nRight: %d  Wrong: %d\n", Bimodal_4096_predictions.correct, Bimodal_4096_predictions.wrong);
-  printf("Sum of predictions: %d. Total predictions: %d\n", Bimodal_4096_predictions.correct + Bimodal_4096_predictions.wrong, total_predictions);
-  printf("\n");
-
-  printf("Bimodal 16384 predictions: \nRight: %d  Wrong: %d\n", Bimodal_16384_predictions.correct, Bimodal_16384_predictions.wrong);
-  printf("Sum of predictions: %d. Total predictions: %d\n", Bimodal_16384_predictions.correct + Bimodal_16384_predictions.wrong, total_predictions);
-  printf("\n");
-
-  printf("gShare 256 predictions: \nRight: %d  Wrong: %d\n", gShare_256_predictions.correct, gShare_256_predictions.wrong);
-  printf("Sum of predictions: %d. Total predictions: %d\n", gShare_256_predictions.correct + gShare_256_predictions.wrong, total_predictions);
-  printf("\n");
-
-  printf("gShare 1024 predictions: \nRight: %d  Wrong: %d\n", gShare_1024_predictions.correct, gShare_1024_predictions.wrong);
-  printf("Sum of predictions: %d. Total predictions: %d\n", gShare_1024_predictions.correct + gShare_1024_predictions.wrong, total_predictions);
-  printf("\n");
-
-  printf("gShare 4096 predictions: \nRight: %d  Wrong: %d\n", gShare_4096_predictions.correct, gShare_4096_predictions.wrong);
-  printf("Sum of predictions: %d. Total predictions: %d\n", gShare_4096_predictions.correct + gShare_4096_predictions.wrong, total_predictions);
-  printf("\n");
-
-  printf("gShare 16384 predictions: \nRight: %d  Wrong: %d\n", gShare_16384_predictions.correct, gShare_16384_predictions.wrong);
-  printf("Sum of predictions: %d. Total predictions: %d\n", gShare_16384_predictions.correct + gShare_16384_predictions.wrong, total_predictions);
-  printf("\n");
   return stat;
+
 }
