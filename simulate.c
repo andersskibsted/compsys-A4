@@ -1,4 +1,5 @@
 #include "simulate.h"
+#include "branch_predictor.h"
 #include "disassemble.h"
 #include "memory.h"
 #include <stdint.h>
@@ -28,18 +29,6 @@ typedef struct {
   int wrong;
 } jump_predictions_t;
 
-typedef struct {
-  uint8_t counter;
-} PHTEntry;
-
-typedef struct {
-  size_t size;
-  PHTEntry entry_table[];
-} BimodalPredictor;
-
-typedef struct {
-  PHTEntry entry_table[PHT_SIZE];
-} PHT;
 
 jump_predictions_t NT_predictions = { .correct = 0, .wrong = 0};
 jump_predictions_t BTFNT_predictions = { .correct = 0, .wrong = 0};
@@ -61,11 +50,11 @@ int pc = 0;
 
 const int instruction_size = 4;
 
-BimodalPredictor* initialize_bimodal_predictor(uint32_t size) {
-  BimodalPredictor* new_PHT = malloc(sizeof(BimodalPredictor) + sizeof(PHTEntry) * size);
-  new_PHT->size = size;
-  return new_PHT;
-}
+/* BimodalPredictor* initialize_bimodal_predictor(uint32_t size) { */
+/*   BimodalPredictor* new_PHT = malloc(sizeof(BimodalPredictor) + sizeof(PHTEntry) * size); */
+/*   new_PHT->size = size; */
+/*   return new_PHT; */
+/* } */
 
 // R-type instructions
 int ADD(int rs1, int rs2) {
@@ -526,81 +515,81 @@ int log_instruction(int instruction_count, int addr, int instruction,
   return bytes_written;
 }
 
-uint32_t get_index(uint32_t addr, uint8_t number_of_bits) {
-  return (addr >> 2) & ((1 << (number_of_bits)) - 1);
-}
+/* uint32_t get_index(uint32_t addr, uint8_t number_of_bits) { */
+/*   return (addr >> 2) & ((1 << (number_of_bits)) - 1); */
+/* } */
 
-int bimodal_branch_prediction(BimodalPredictor *prediction_table,
-                              uint32_t b_instruction_addr,
-                              uint8_t number_of_bits) {
+/* int bimodal_branch_prediction(BimodalPredictor *prediction_table, */
+/*                               uint32_t b_instruction_addr, */
+/*                               uint8_t number_of_bits) { */
 
-  uint32_t index = get_index(b_instruction_addr, number_of_bits);
+/*   uint32_t index = get_index(b_instruction_addr, number_of_bits); */
 
-  // If there's no entry, create one and assume it should be taken
-  if (&prediction_table->entry_table[index] == NULL) {
-    PHTEntry new_entry; // = malloc(sizeof(PHTEntry));
-    new_entry.counter = 2;
-    prediction_table->entry_table[index] = new_entry;
-  }
+/*   // If there's no entry, create one and assume it should be taken */
+/*   if (&prediction_table->entry_table[index] == NULL) { */
+/*     PHTEntry new_entry; // = malloc(sizeof(PHTEntry)); */
+/*     new_entry.counter = 2; */
+/*     prediction_table->entry_table[index] = new_entry; */
+/*   } */
 
-  return prediction_table->entry_table[index].counter >= 2;
-}
+/*   return prediction_table->entry_table[index].counter >= 2; */
+/* } */
 
-void update_pht(BimodalPredictor *prediction_table, uint32_t index, int prediction_result) {
+/* void update_pht(BimodalPredictor *prediction_table, uint32_t index, int prediction_result) { */
 
-  // Only use 4 LSB for addressing the prediction counter
+/*   // Only use 4 LSB for addressing the prediction counter */
 
-  if (prediction_result) {
-    if (prediction_table->entry_table[index].counter < 3) {
-      prediction_table->entry_table[index].counter++;
-    }
-  } else {
-    if (prediction_table->entry_table[index].counter > 0) {
-      prediction_table->entry_table[index].counter--;
-    }
-  }
+/*   if (prediction_result) { */
+/*     if (prediction_table->entry_table[index].counter < 3) { */
+/*       prediction_table->entry_table[index].counter++; */
+/*     } */
+/*   } else { */
+/*     if (prediction_table->entry_table[index].counter > 0) { */
+/*       prediction_table->entry_table[index].counter--; */
+/*     } */
+/*   } */
 
-}
+/* } */
 
-void update_bimodal_predictor(BimodalPredictor *prediction_table,
-                              uint32_t b_instruction_addr,
-                              int prediction_result, uint8_t number_of_bits) {
+/* void update_bimodal_predictor(BimodalPredictor *prediction_table, */
+/*                               uint32_t b_instruction_addr, */
+/*                               int prediction_result, uint8_t number_of_bits) { */
 
-  uint32_t index = get_index(b_instruction_addr, number_of_bits);
+/*   uint32_t index = get_index(b_instruction_addr, number_of_bits); */
 
-  update_pht(prediction_table, index, prediction_result);
-}
+/*   update_pht(prediction_table, index, prediction_result); */
+/* } */
 
-uint32_t update_GHR(uint32_t GHR, int branch_result, int number_of_bits) {
-  uint32_t bit_mask = (1 << number_of_bits) - 1;
-  return ((GHR << 1) | (branch_result & 1)) & bit_mask;
-}
+/* uint32_t update_GHR(uint32_t GHR, int branch_result, int number_of_bits) { */
+/*   uint32_t bit_mask = (1 << number_of_bits) - 1; */
+/*   return ((GHR << 1) | (branch_result & 1)) & bit_mask; */
+/* } */
 
-int gShare_prediction(uint8_t GHR, BimodalPredictor *gShare_PHT,
-                      uint32_t b_instruction_addr, uint8_t number_of_bits) {
-  uint32_t index = get_index(b_instruction_addr, number_of_bits);
-  index |= GHR;
+/* int gShare_prediction(uint8_t GHR, BimodalPredictor *gShare_PHT, */
+/*                       uint32_t b_instruction_addr, uint8_t number_of_bits) { */
+/*   uint32_t index = get_index(b_instruction_addr, number_of_bits); */
+/*   index |= GHR; */
 
-  // If no entry for index, create one
-  if (&gShare_PHT->entry_table[index] != NULL) {
-    PHTEntry new_entry;
-    new_entry.counter = 2;
-    gShare_PHT->entry_table[index] = new_entry;
-  }
+/*   // If no entry for index, create one */
+/*   if (&gShare_PHT->entry_table[index] != NULL) { */
+/*     PHTEntry new_entry; */
+/*     new_entry.counter = 2; */
+/*     gShare_PHT->entry_table[index] = new_entry; */
+/*   } */
 
-  return gShare_PHT->entry_table[index].counter >= 2;
-}
+/*   return gShare_PHT->entry_table[index].counter >= 2; */
+/* } */
 
-void update_gShare_bimodal_predictor(uint8_t GHR, BimodalPredictor *gShare_PHT,
-                                     uint32_t b_instruction_addr,
-                                     int prediction_result, uint8_t number_of_bits) {
+/* void update_gShare_bimodal_predictor(uint8_t GHR, BimodalPredictor *gShare_PHT, */
+/*                                      uint32_t b_instruction_addr, */
+/*                                      int prediction_result, uint8_t number_of_bits) { */
 
 
-  uint32_t index = get_index(b_instruction_addr, number_of_bits);
-  index |= GHR;
+/*   uint32_t index = get_index(b_instruction_addr, number_of_bits); */
+/*   index |= GHR; */
 
-  update_pht(gShare_PHT, index, prediction_result);
-}
+/*   update_pht(gShare_PHT, index, prediction_result); */
+/* } */
 
 struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct symbols *symbols) {
 
@@ -624,22 +613,24 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
   // maybe their entries should be free'd at end of function
   // Bimodal predictions
   //BimodalPredictor* bimodal_prediction_table = (BimodalPredictor*)malloc(sizeof(BimodalPredictor));
-  BimodalPredictor* bim_pht_256 = initialize_bimodal_predictor(256); // 8-bits
-  BimodalPredictor* bim_pht_1024 = initialize_bimodal_predictor(1024); // 10-bits
-  BimodalPredictor* bim_pht_4096 = initialize_bimodal_predictor(4096); // 12-bits
-  BimodalPredictor* bim_pht_16384 = initialize_bimodal_predictor(16384); // 14-bits
+  BimodalPredictor* bim_pht_256 = create_bimodal_predictor(8); // 8-bits
+  BimodalPredictor* bim_pht_1024 = create_bimodal_predictor(10); // 10-bits
+  BimodalPredictor* bim_pht_4096 = create_bimodal_predictor(12); // 12-bits
+  BimodalPredictor* bim_pht_16384 = create_bimodal_predictor(14); // 14-bits
 
   // gShare predictions
-  BimodalPredictor* gs_pht_256 = initialize_bimodal_predictor(256);
-  BimodalPredictor* gs_pht_1024 = initialize_bimodal_predictor(1024);
-  BimodalPredictor* gs_pht_4096 = initialize_bimodal_predictor(4096);
-  BimodalPredictor* gs_pht_16384 = initialize_bimodal_predictor(16384);
+  BimodalPredictor* gs_pht_256 = create_bimodal_predictor(8);
+  BimodalPredictor* gs_pht_1024 = create_bimodal_predictor(10);
+  BimodalPredictor* gs_pht_4096 = create_bimodal_predictor(12);
+  BimodalPredictor* gs_pht_16384 = create_bimodal_predictor(14);
   /* BimodalPredictor* gSharePHT = (BimodalPredictor*)malloc(sizeof(BimodalPredictor)); */
   uint8_t GHR_256 = 0;
   uint32_t GHR_1024 = 0;
   uint32_t GHR_4096 = 0;
   uint32_t GHR_16384 = 0;
-
+  uint32_t total_predictions = 0;
+// Debug prints
+//
   // Read first instruction
   uint32_t instruction = memory_rd_w(mem, pc);
   // Main execution loop for instructions.
@@ -758,23 +749,25 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
       // gShare
       int gS_prediction_256 = gShare_prediction(GHR_256, gs_pht_256, pc, 8);
       int gS_prediction_accuracy_256 = gS_prediction_256 == branch_result.branch;
-      GHR_256 = update_GHR(GHR_256, branch_result.branch, 8);
       update_gShare_bimodal_predictor(GHR_256, gs_pht_256, pc, branch_result.branch, 8);
+      GHR_256 = update_GHR(GHR_256, branch_result.branch, 8);
       // 1024
       int gS_prediction_1024 = gShare_prediction(GHR_1024, gs_pht_1024, pc, 10);
       int gS_prediction_accuracy_1024 = gS_prediction_1024 == branch_result.branch;
-      GHR_1024 = update_GHR(GHR_1024, branch_result.branch, 10);
       update_gShare_bimodal_predictor(GHR_1024, gs_pht_1024, pc, branch_result.branch, 10);
+      GHR_1024 = update_GHR(GHR_1024, branch_result.branch, 10);
       // 4096
       int gS_prediction_4096 = gShare_prediction(GHR_4096, gs_pht_4096, pc, 12);
       int gS_prediction_accuracy_4096 = gS_prediction_4096 == branch_result.branch;
-      GHR_4096 = update_GHR(GHR_4096, branch_result.branch, 12);
       update_gShare_bimodal_predictor(GHR_4096, gs_pht_4096, pc, branch_result.branch, 12);
+      GHR_4096 = update_GHR(GHR_4096, branch_result.branch, 12);
       // 1024
       int gS_prediction_16384 = gShare_prediction(GHR_16384, gs_pht_16384, pc, 14);
       int gS_prediction_accuracy_16384 = gS_prediction_16384 == branch_result.branch;
-      GHR_16384 = update_GHR(GHR_16384, branch_result.branch, 14);
       update_gShare_bimodal_predictor(GHR_16384, gs_pht_16384, pc, branch_result.branch, 14);
+      GHR_16384 = update_GHR(GHR_16384, branch_result.branch, 14);
+
+      total_predictions++;
 
       if (bimodal_prediction_accuracy_256) {
         Bimodal_256_predictions.correct++;
@@ -946,18 +939,44 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     stat.insns++;
   }
 
-  printf("NT predictions: \n Right: %d  Wrong: %d\n", NT_predictions.correct, NT_predictions.wrong);
-  printf("BTFNT predictions: \n Right: %d  Wrong: %d\n", BTFNT_predictions.correct, BTFNT_predictions.wrong);
-  printf("Bimodal 256 predictions: \n Right: %d  Wrong: %d\n", Bimodal_256_predictions.correct, Bimodal_256_predictions.wrong);
-  printf("gShare 256 predictions: \n Right: %d  Wrong: %d\n", gShare_256_predictions.correct, gShare_256_predictions.wrong);
+  printf("NT predictions: \nRight: %d  Wrong: %d\n", NT_predictions.correct, NT_predictions.wrong);
+  printf("Sum of predictions: %d. Total predictions: %d\n", NT_predictions.correct + NT_predictions.wrong, total_predictions);
+  printf("\n");
 
-  printf("Bimodal 1024 predictions: \n Right: %d  Wrong: %d\n", Bimodal_1024_predictions.correct, Bimodal_1024_predictions.wrong);
-  printf("gShare 1024 predictions: \n Right: %d  Wrong: %d\n", gShare_1024_predictions.correct, gShare_1024_predictions.wrong);
+  printf("BTFNT predictions: \nRight: %d  Wrong: %d\n", BTFNT_predictions.correct, BTFNT_predictions.wrong);
+  printf("Sum of predictions: %d. Total predictions: %d\n", BTFNT_predictions.correct + BTFNT_predictions.wrong, total_predictions);
+  printf("\n");
 
-  printf("Bimodal 4096 predictions: \n Right: %d  Wrong: %d\n", Bimodal_4096_predictions.correct, Bimodal_4096_predictions.wrong);
-  printf("gShare 4096 predictions: \n Right: %d  Wrong: %d\n", gShare_4096_predictions.correct, gShare_4096_predictions.wrong);
+  printf("Bimodal 256 predictions: \nRight: %d  Wrong: %d\n", Bimodal_256_predictions.correct, Bimodal_256_predictions.wrong);
+  printf("Sum of predictions: %d. Total predictions: %d\n", Bimodal_256_predictions.correct + Bimodal_256_predictions.wrong, total_predictions);
+  printf("\n");
 
-  printf("Bimodal 16384 predictions: \n Right: %d  Wrong: %d\n", Bimodal_16384_predictions.correct, Bimodal_16384_predictions.wrong);
-  printf("gShare 16384 predictions: \n Right: %d  Wrong: %d\n", gShare_16384_predictions.correct, gShare_16384_predictions.wrong);
+  printf("Bimodal 1024 predictions: \nRight: %d  Wrong: %d\n", Bimodal_1024_predictions.correct, Bimodal_1024_predictions.wrong);
+  printf("Sum of predictions: %d. Total predictions: %d\n", Bimodal_1024_predictions.correct + Bimodal_1024_predictions.wrong, total_predictions);
+  printf("\n");
+
+  printf("Bimodal 4096 predictions: \nRight: %d  Wrong: %d\n", Bimodal_4096_predictions.correct, Bimodal_4096_predictions.wrong);
+  printf("Sum of predictions: %d. Total predictions: %d\n", Bimodal_4096_predictions.correct + Bimodal_4096_predictions.wrong, total_predictions);
+  printf("\n");
+
+  printf("Bimodal 16384 predictions: \nRight: %d  Wrong: %d\n", Bimodal_16384_predictions.correct, Bimodal_16384_predictions.wrong);
+  printf("Sum of predictions: %d. Total predictions: %d\n", Bimodal_16384_predictions.correct + Bimodal_16384_predictions.wrong, total_predictions);
+  printf("\n");
+
+  printf("gShare 256 predictions: \nRight: %d  Wrong: %d\n", gShare_256_predictions.correct, gShare_256_predictions.wrong);
+  printf("Sum of predictions: %d. Total predictions: %d\n", gShare_256_predictions.correct + gShare_256_predictions.wrong, total_predictions);
+  printf("\n");
+
+  printf("gShare 1024 predictions: \nRight: %d  Wrong: %d\n", gShare_1024_predictions.correct, gShare_1024_predictions.wrong);
+  printf("Sum of predictions: %d. Total predictions: %d\n", gShare_1024_predictions.correct + gShare_1024_predictions.wrong, total_predictions);
+  printf("\n");
+
+  printf("gShare 4096 predictions: \nRight: %d  Wrong: %d\n", gShare_4096_predictions.correct, gShare_4096_predictions.wrong);
+  printf("Sum of predictions: %d. Total predictions: %d\n", gShare_4096_predictions.correct + gShare_4096_predictions.wrong, total_predictions);
+  printf("\n");
+
+  printf("gShare 16384 predictions: \nRight: %d  Wrong: %d\n", gShare_16384_predictions.correct, gShare_16384_predictions.wrong);
+  printf("Sum of predictions: %d. Total predictions: %d\n", gShare_16384_predictions.correct + gShare_16384_predictions.wrong, total_predictions);
+  printf("\n");
   return stat;
 }
