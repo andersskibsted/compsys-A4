@@ -93,8 +93,9 @@ int SRA(int a, int b) {
   return a >> b;
 }
 
-int MUL(int rs1, int rs2) {
-  return rs1 * rs2;
+int MUL(int a, int b) {
+  int64_t result = (int64_t)a * b;
+  return (int32_t)result;
 }
 
 // TODO - Look into the signed bit of these high
@@ -103,20 +104,23 @@ int MULH(int a, int b) {
   // TODO - Check if care should be taken,
   // since this is the high 32 bits
   // and signed x signed...
-  return a * b;
+  int64_t result = (int64_t)a * b;
+  return (int32_t)(result >> 32);
 }
 
-int MULHU(int a, int b) {
+int MULHU(uint32_t a, uint32_t b) {
   // TODO - Check if care should be taken,
   // since this is the high 32 bits and it is *unsigned*
-  return a * b;
+  uint64_t result = (uint64_t)a * b;
+  return (uint32_t)(result >> 32);
 }
 
-int MULHSU(int a, int b) {
+int MULHSU(int32_t a, uint32_t b) {
   // TODO - Check if care should be taken,
   // since this is the high 32 bits
   // and it is signed x unsigned
-  return a * b;
+  uint64_t result = (int64_t)a * b;
+  return (int32_t)(result >> 32);
 }
 
 int DIV(int a, int b) {
@@ -298,20 +302,26 @@ JAL_return execute_JALR(DecodedInstruction JALR_instruction) {
 
 
 int execute_s_type(DecodedInstruction s_type_instruction, struct memory *mem) {
+  // Store instructions
   int store_status = 0;
   int store_addr = register_file[s_type_instruction.rs1] + s_type_instruction.imm;
   int rs2 = register_file[s_type_instruction.rs2];
+  signed short rs2_sh = (signed short) register_file[s_type_instruction.rs2];
 
   switch (s_type_instruction.funct3) {
   case 0x00:
+    // SB
     memory_wr_b(mem, store_addr, rs2);
     store_status = 1;
     break;
   case 0x01:
-    memory_wr_h(mem, store_addr, rs2);
+    // SH
+    /* memory_wr_h(mem, store_addr, rs2); */
+    memory_wr_h(mem, store_addr, rs2_sh);
     store_status = 1;
     break;
   case 0x02:
+    // SW
     memory_wr_w(mem, store_addr, rs2);
     store_status = 1;
     break;
