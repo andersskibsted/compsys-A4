@@ -33,5 +33,5 @@ int log_instruction(int instruction_count, int addr, int instruction,
                     FILE *log_file, void *data, struct symbols *symbols);
 
 
-void log_jump_predictions(FILE* log_file, int total_predictions);
+int log_jump_predictions(FILE* log_file, int total_predictions);
 #endif // LOGGING_H_
