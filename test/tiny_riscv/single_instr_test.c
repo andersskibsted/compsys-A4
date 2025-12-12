@@ -1,5 +1,22 @@
 #include "lib.h"
 
+
+/* #define BRANCH_TEST(instr) \ */
+/*     int result = -1; \ */
+/*     int pc = 0; \ */
+/*     asm volatile( \ */
+/*       #instr " %2, %3, taken\n" \ */
+/*       "addi %0, zero, 0\n" \ */
+/*       "jal zero, end\n" \ */
+/*       "taken:\n" \ */
+/*       "addi %0, zero, 1\n" \ */
+/*       "end:\n" \ */
+/*       "auipc %1, 0\n" \ */
+/*       : "+r" (result), "=r" (pc) \ */
+/*       : "r" (a), "r" (b) \ */
+/*     ); \ */
+/*     return result; */
+
 typedef int (*BinaryOp)(int, int);
 typedef int (*UnaryOp)(int);
 
@@ -418,7 +435,165 @@ int remu(int a, int b) {
 
 // B-instruktions
 
+int beq(int a, int b) {
+  int result = -1; \
+    int pc = 0; \
+    asm volatile( \
+      "beq %2, %3, taken\n" \
+      "addi %0, zero, 0\n" \
+      "jal zero, end\n" \
+      "taken:\n" \
+      "addi %0, zero, 1\n" \
+      "end:\n" \
+      "auipc %1, 0\n" \
+      : "+r" (result), "=r" (pc) \
+      : "r" (a), "r" (b) \
+    ); \
+    return result;
+}
 
+int bne(int a, int b) {
+  int result = -1; \
+    int pc = 0; \
+    asm volatile( \
+      "bne %2, %3, takenne\n" \
+      "addi %0, zero, 0\n" \
+      "jal zero, endne\n" \
+      "takenne:\n" \
+      "addi %0, zero, 1\n" \
+      "endne:\n" \
+      "auipc %1, 0\n" \
+      : "+r" (result), "=r" (pc) \
+      : "r" (a), "r" (b) \
+    ); \
+    return result;
+}
+
+int blt(int a, int b) {
+  int result = -1; \
+    int pc = 0; \
+    asm volatile( \
+      "blt %2, %3, takenlt\n" \
+      "addi %0, zero, 0\n" \
+      "jal zero, endlt\n" \
+      "takenlt:\n" \
+      "addi %0, zero, 1\n" \
+      "endlt:\n" \
+      "auipc %1, 0\n" \
+      : "+r" (result), "=r" (pc) \
+      : "r" (a), "r" (b) \
+    ); \
+    return result;
+}
+
+int bge(int a, int b) {
+  int result = -1; \
+    int pc = 0; \
+    asm volatile( \
+      "bge %2, %3, takenge\n" \
+      "addi %0, zero, 0\n" \
+      "jal zero, endge\n" \
+      "takenge:\n" \
+      "addi %0, zero, 1\n" \
+      "endge:\n" \
+      "auipc %1, 0\n" \
+      : "+r" (result), "=r" (pc) \
+      : "r" (a), "r" (b) \
+    ); \
+    return result;
+}
+
+int bltu(int a, int b) {
+  int result = -1; \
+    int pc = 0; \
+    asm volatile( \
+      "bltu %2, %3, takenltu\n" \
+      "addi %0, zero, 0\n" \
+      "jal zero, endltu\n" \
+      "takenltu:\n" \
+      "addi %0, zero, 1\n" \
+      "endltu:\n" \
+      "auipc %1, 0\n" \
+      : "+r" (result), "=r" (pc) \
+      : "r" (a), "r" (b) \
+    ); \
+    return result;
+}
+
+int bgeu(int a, int b) {
+  int result = -1;
+    int pc = 0;
+    asm volatile(
+      "bgeu %2, %3, takengeu\n"
+      "addi %0, zero, 0\n"
+      "jal zero, endgeu\n"
+      "takengeu:\n"
+      "addi %0, zero, 1\n"
+      "endgeu:\n"
+      "auipc %1, 0\n"
+      : "+r" (result), "=r" (pc)
+      : "r" (a), "r" (b)
+    );
+    return result;
+}
+
+// Jump intsructions
+int jal(int a) {
+  char buffer[50];
+  int pc_before = 0;
+  int rd = 0;
+  int pc_after = 0;
+
+  asm volatile(
+    "auipc %0, 0\n"
+    "jal %1, jump\n"
+    "addi %0, zero, 5\n"
+    "addi %1, zero, 6\n"
+    "jump:\n"
+    "auipc %2, 0"
+    : "=r" (pc_before), "=r" (rd), "=r" (pc_after)
+    :
+    );
+  print_string("PC before jump: ");
+  uns_to_str(buffer, pc_before);
+  print_string(buffer);
+  print_string("\n");
+
+  print_string("RD from jump: ");
+  uns_to_str(buffer, rd);
+  print_string(buffer);
+  print_string("\n");
+
+  return pc_after;
+}
+
+int jalr(int a) {
+  char buffer[50];
+  int pc_before = 0;
+  int rd = 0;
+  int pc_after = 0;
+
+  asm volatile(
+    "auipc %0, 0\n"
+    "jalr %1, 16(%3)\n"
+    "addi %0, zero, 5\n"
+    "addi %1, zero, 6\n"
+    "auipc %2, 0"
+    : "+r" (pc_before), "=r" (rd), "=r" (pc_after)
+    : "r" (pc_before)
+    );
+  print_string("PC before jump: ");
+  uns_to_str(buffer, pc_before);
+  print_string(buffer);
+  print_string("\n");
+
+  print_string("RD from jump: ");
+  uns_to_str(buffer, rd);
+  print_string(buffer);
+  print_string("\n");
+
+  return pc_after;
+}
 
 int lui(int imm) {
   int result = 0;
@@ -632,10 +807,114 @@ int main(int argc, char** argv) {
   print_string("PC + 4 + (16 << 12) is ");
   print_unary_result(1, auipc);
 
+  // Testing BEQ
+  print_string("Testing BEQ: \n");
+  print_string("Jump if 1 = 1: ");
+  print_result(1, 1, beq);
 
-  /* char buffer[10]; */
-  /* signed_to_str(buffer, 102); */
-  /* print_string(buffer); */
+  print_string("Testing BEQ: \n");
+  print_string("Jump if 2 = 1: ");
+  print_result(2, 1, beq);
+
+  print_string("Testing BEQ: \n");
+  print_string("Jump if -1 = -1: ");
+  print_result(-1, -1, beq);
+
+  print_string("Testing BEQ: \n");
+  print_string("Jump if -2 = 1: ");
+  print_result(-2, 1, beq);
+
+  // Testing BNE
+  print_string("Testing BNE: \n");
+  print_string("Jump if 1 != 1: ");
+  print_result(1, 1, bne);
+
+  print_string("Testing BNE: \n");
+  print_string("Jump if 2 != 1: ");
+  print_result(2, 1, bne);
+
+  print_string("Testing BNE: \n");
+  print_string("Jump if -1 != -1: ");
+  print_result(-1, -1, bne);
+
+  print_string("Testing BNE: \n");
+  print_string("Jump if -2 != 1: ");
+  print_result(-2, 1, bne);
+
+  // Testing BLT
+  print_string("Testing BLT: \n");
+  print_string("Jump if 1 < 1: ");
+  print_result(1, 1, blt);
+
+  print_string("Testing BLT: \n");
+  print_string("Jump if 1 < 2: ");
+  print_result(1, 2, blt);
+
+  print_string("Testing BLT: \n");
+  print_string("Jump if -1 < -1: ");
+  print_result(-1, -1, blt);
+
+  print_string("Testing BLT: \n");
+  print_string("Jump if -2 < 1: ");
+  print_result(-2, 1, blt);
+
+  // Testing BGE
+  print_string("Testing BGE: \n");
+  print_string("Jump if 1 >= 1: ");
+  print_result(1, 1, bge);
+
+  print_string("Testing BGE: \n");
+  print_string("Jump if 1 >= 2: ");
+  print_result(1, 2, bge);
+
+  print_string("Testing BGE: \n");
+  print_string("Jump if 2 >= 1: ");
+  print_result(2, 1, bge);
+
+  print_string("Testing BGE: \n");
+  print_string("Jump if -1 >= -1: ");
+  print_result(-1, -1, bge);
+
+  print_string("Testing BGE: \n");
+  print_string("Jump if -2 >= 1: ");
+  print_result(-2, 1, bge);
+
+  print_string("Testing BGE: \n");
+  print_string("Jump if -2 >= -3: ");
+  print_result(-2, -3, bge);
+
+  // Testing BLTU
+  print_string("Testing BLTU: \n");
+  print_string("Jump if 1 < 1: ");
+  print_result(1, 1, bltu);
+
+  print_string("Testing BLTU: \n");
+  print_string("Jump if 1 < 2: ");
+  print_result(1, 2, bltu);
+
+  print_string("Testing BLTU: \n");
+  print_string("Jump if 2 < 1: ");
+  print_result(2, 1, bltu);
+
+  // Testing BGEU
+  print_string("Testing BGEU: \n");
+  print_string("Jump if 1 >= 1: ");
+  print_result(1, 1, bgeu);
+
+  print_string("Testing BGEU: \n");
+  print_string("Jump if 1 >= 2: ");
+  print_result(1, 2, bgeu);
+
+  print_string("Testing BGEU: \n");
+  print_string("Jump if 2 >= 1: ");
+  print_result(2, 1, bgeu);
+
+  // Test jumps
+  print_string("Testing JAL:\n");
+  print_unary_result(1, jal);
+
+  print_string("Testing JALR:\n");
+  print_unary_result(1, jalr);
 
   return 0;
 }

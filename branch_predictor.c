@@ -54,6 +54,7 @@ void update_bimodal_predictor(BimodalPredictor *prediction_table,
   update_pht(prediction_table, index, prediction_result);
 }
 
+
 uint32_t update_GHR(uint32_t GHR, int branch_result, int number_of_bits) {
   uint32_t bit_mask = (1 << number_of_bits) - 1;
   return ((GHR << 1) | (branch_result & 1)) & bit_mask;
