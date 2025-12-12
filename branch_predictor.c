@@ -1,5 +1,4 @@
 #include "branch_predictor.h"
-#include <cstdio>
 
 
 uint32_t get_index(uint32_t addr, uint8_t number_of_bits) {
@@ -32,7 +31,6 @@ int bimodal_branch_prediction(BimodalPredictor *prediction_table,
 
 void update_pht(BimodalPredictor *prediction_table, uint32_t index, int prediction_result) {
 
-  // Only use 4 LSB for addressing the prediction counter
 
   if (prediction_result) {
     if (prediction_table->entry_table[index].counter < 3) {
