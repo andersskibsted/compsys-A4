@@ -48,4 +48,6 @@ void update_gShare_bimodal_predictor(uint32_t GHR, BimodalPredictor *gShare_PHT,
                                      uint32_t b_instruction_addr,
                                      int prediction_result, uint8_t number_of_bits);
 
+void free_pht(BimodalPredictor* pht);
+
 #endif // BRANCH_PREDICTOR_H_

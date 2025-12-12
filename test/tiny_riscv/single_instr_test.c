@@ -1,22 +1,6 @@
 #include "lib.h"
 
 
-/* #define BRANCH_TEST(instr) \ */
-/*     int result = -1; \ */
-/*     int pc = 0; \ */
-/*     asm volatile( \ */
-/*       #instr " %2, %3, taken\n" \ */
-/*       "addi %0, zero, 0\n" \ */
-/*       "jal zero, end\n" \ */
-/*       "taken:\n" \ */
-/*       "addi %0, zero, 1\n" \ */
-/*       "end:\n" \ */
-/*       "auipc %1, 0\n" \ */
-/*       : "+r" (result), "=r" (pc) \ */
-/*       : "r" (a), "r" (b) \ */
-/*     ); \ */
-/*     return result; */
-
 typedef int (*BinaryOp)(int, int);
 typedef int (*UnaryOp)(int);
 
@@ -278,6 +262,98 @@ int sltu(int a, int b) {
   return result;
 }
 
+// I-types
+int addi(int a) {
+  int result = 0;
+
+  asm volatile(
+    "addi %0, %1, 1000"
+    :   "=r" (result)
+    :   "r" (a)
+    );
+  return result;
+}
+
+int neg_addi(int a) {
+  int result = 0;
+
+  asm volatile(
+    "addi %0, %1, -1000"
+    :   "=r" (result)
+    :   "r" (a)
+    );
+  return result;
+}
+
+int andi(int a) {
+  int result = 0;
+
+  asm volatile(
+    "andi %0, %1, 254"
+    :   "=r" (result)
+    :   "r" (a)
+    );
+  return result;
+}
+
+
+int ori(int a) {
+  int result = 0;
+
+  asm volatile(
+    "ori %0, %1, 257"
+    :   "=r" (result)
+    :   "r" (a)
+    );
+  return result;
+}
+
+int xori(int a) {
+  int result = 0;
+
+  asm volatile(
+    "xori %0, %1, 261"
+    :   "=r" (result)
+    :   "r" (a)
+    );
+  return result;
+}
+
+int slli(int a) {
+  int result = 0;
+
+  asm volatile(
+    "slli %0, %1, 4"
+    :   "=r" (result)
+    :   "r" (a)
+    );
+  return result;
+}
+
+int srli(int a) {
+  int result = 0;
+
+  asm volatile(
+    "srli %0, %1, 4"
+    :   "=r" (result)
+    :   "r" (a)
+    );
+  return result;
+}
+
+
+int srai(int a) {
+  int result = 0;
+
+  asm volatile(
+    "srai %0, %1, 4"
+    :   "=r" (result)
+    :   "r" (a)
+    );
+
+  return result;
+}
+
 int sltiu(int a) {
   unsigned int result = 0;
   unsigned int unsigned_a = (unsigned int) a;
@@ -302,6 +378,27 @@ int slti(int a) {
   return result;
 }
 
+// Store and load tests
+int sb_lb(int a) {
+  signed char result = 0;
+  signed char array[10];
+  signed char char_a = (signed char) a;
+  asm volatile(
+    "sb %0, 0(%1)"
+    :
+    :   "r" (char_a), "r" (array)
+    :   "memory"
+    );
+  asm volatile(
+    "lb %0, 0(%1)"
+    :   "=r" (result)
+    :   "r" (array)
+    :
+    );
+
+  return (int)result;
+}
+
 int sh_lh(int a) {
   signed short result = 0;
   char array[10];
@@ -320,6 +417,46 @@ int sh_lh(int a) {
     );
 
   return result;
+}
+
+int sw_lw(int a) {
+  int result = 0;
+  char array[10];
+
+  asm volatile(
+    "sw %0, 0(%1)"
+    :
+    :   "r" (a), "r" (array)
+    :   "memory"
+    );
+  asm volatile(
+    "lw %0, 0(%1)"
+    :   "=r" (result)
+    :   "r" (array)
+    :
+    );
+
+  return result;
+}
+
+int sb_lbu(int a) {
+  unsigned char result = 0;
+  char array[10];
+  unsigned char unsigned_char_a = (unsigned char) a;
+  asm volatile(
+    "sb %0, 0(%1)"
+    :
+    :   "r" (unsigned_char_a), "r" (array)
+    :   "memory"
+    );
+  asm volatile(
+    "lbu %0, 0(%1)"
+    :   "=r" (result)
+    :   "r" (array)
+    :
+    );
+
+  return (int)result;
 }
 
 int sh_lhu(int a) {
@@ -625,63 +762,90 @@ int auipc(int a) {
 int main(int argc, char** argv) {
 
   // R-types
-  print_string("Testing R-types: \n");
+  print_string("\nTesting R-types:\n\n");
+  print_string("Testing ADD:\n");
   print_string("10 + 20 = ");
   print_result(10, 20, add);
 
+  print_string("Testing SUB:\n");
   print_string("10 - 20 = ");
   print_result(10, 20, sub);
 
+  print_string("Testing SUB:\n");
+  print_string("-10 - 20 = ");
+  print_result(-10, 20, sub);
+
+  print_string("Testing AND:\n");
   print_string("0b1101 & 0b0101 = ");
   print_binary_result_bits(13, 5, and);
 
+  print_string("Testing OR:\n");
   print_string("0b11010 | 0b01010 = ");
   print_binary_result_bits(26, 10, or);
 
+  print_string("Testing XOR:\n");
   print_string("0b11010 | 0b01010 = ");
   print_binary_result_bits(26, 10, xor);
 
+  print_string("Testing SLL:\n");
   print_string("0b1101 << 4 = ");
   print_binary_result_bits(13, 4, sll);
 
+  print_string("Testing SRL:\n");
   print_string("0b11010 >> 4 = ");
   print_binary_result_bits(26, 4, srl);
 
+  print_string("Testing SRA:\n");
   print_string("SRA: -0b11010 >> 4 = ");
   print_binary_result_bits(-26, 4, sra);
 
+  print_string("Testing SLT:\n");
   print_string("8 < 100 is ");
   print_result(8, 100, slt);
 
+  print_string("Testing SLT:\n");
   print_string("101 < 100 is ");
   print_result(101, 100, slt);
 
+  print_string("Testing SLT:\n");
   print_string("-101 < 100 is ");
   print_result(-101, 100, slt);
 
+  print_string("Testing SLT:\n");
   print_string("8 < -100 is ");
   print_result(8, -100, slt);
 
+  print_string("Testing SLT:\n");
   print_string("-8 < -100 is ");
   print_result(-8, -100, slt);
 
+  print_string("Testing SLTU:\n");
   print_string("8 < 100 is ");
   print_result(8, 100, sltu);
 
+  print_string("Testing SLTU:\n");
   print_string("101 < 100 is ");
   print_result(101, 100, sltu);
-  // Test SLTIU
-  print_string("8 < 100 is ");
-  print_unary_result(8, sltiu);
 
-  print_string("101 < 100 is ");
-  print_unary_result(101, sltiu);
+  print_string("\n\n");
+  // Test SB LB
+  print_string("Testing SB and LB:\n\n");
+  print_string("Storing byte 0x78 / 120 and loading it to be: ");
+  print_unary_result(120, sb_lb);
+  // Testing with halfword to be truncated
+  print_string("Storing halfword 0x5678 / 22136 and loading it to be 120: ");
+  print_unary_result(0x5678, sb_lb);
+  // Testing with negative halfword
+  print_string("Storing halfword -0x5678 / -22136 and loading it to be -120: ");
+  print_unary_result(-0x5678, sb_lb);
 
-  // Test SLTI
-  print_string("-200 < -100 is ");
-  print_unary_result(-200, slti);
+  // Testing with negative byte
+  print_string("Storing word -0x78 / -120 and loading it to be: ");
+  print_unary_result(-120, sb_lb);
 
+  print_string("\n");
   // Test SH LH
+  print_string("Testing SH and LH:\n");
   print_string("Storing halfword 0x5678 / 22136 and loading it to be: ");
   print_unary_result(22136, sh_lh);
   // Testing with word to be truncated
@@ -697,84 +861,136 @@ int main(int argc, char** argv) {
   print_unary_result(-22136, sh_lh);
   print_signed_as_unsigned(-22136);
 
+  print_string("\n");
+  // Test SW LW
+  print_string("Testing SW and LW:\n");
+  print_string("Storing byte 0x78 / 120 and loading it to be: ");
+  print_unary_result(120, sw_lw);
 
+  print_string("Storing byte -0x78 / -120 and loading it to be: ");
+  print_unary_result(-120, sw_lw);
+
+  print_string("Storing halfword 0x5678 / 22136 and loading it to be: ");
+  print_unary_result(22136, sw_lw);
+  // Testing with word
+  print_string("Storing word 0x12345678 / 305419896 and loading it to be: ");
+  print_unary_result(305419896, sw_lw);
+  // Testing with negative word
+  print_string("Storing word -0x12345678 / -305419896 and loading it to be: ");
+  print_unary_result(-305419896, sw_lw);
+
+  // Testing with negative halfword
+  print_string("Storing halfword -22136 and loading it to be: ");
+  print_unary_result(-22136, sw_lw);
+
+  print_string("\n");
   // Test SH LHU
+  print_string("Testing SH and LHU:\n");
   print_string("Storing halfword 0x5678 / 22136 and loading it to be: ");
   print_unary_result(22136, sh_lhu);
   // Testing with word to be truncated
   print_string("Storing word 0x12345678 / 305419896 and loading it to be 22136: ");
   print_unary_result(305419896, sh_lhu);
 
+  // Test SB LBU
+  print_string("Testing SB and LBU:\n");
+  print_string("Storing byte 0x78 / 120 and loading it to be: ");
+  print_unary_result(120, sb_lbu);
+  // Testing with word to be truncated
+  print_string("Storing halfword 0x5678 / 22136 and loading it to be 120: ");
+  print_unary_result(22136, sb_lbu);
+
+  print_string("\n\n");
   // Testing RV32M
+  print_string("Testing RV32M:\n\n");
   // Testing MUL
+  print_string("Testing MUL:\n");
   print_string("12 * 56 = ");
   print_result(12, 56, mul);
 
+  print_string("Testing MUL:\n");
   print_string("-12 * 56 = ");
   print_result(-12, 56, mul);
+
   print_signed_as_unsigned(-672);
   print_string("12 * -56 = ");
   print_result(12, -56, mul);
-  print_signed_as_unsigned(-672);
+
   print_string("-12 * -56 = ");
   print_result(-12, -56, mul);
 
   // Testing MULH
   print_string("Testing MULH\n");
-  print_string("0xFFFFFFF * 100000 = ");
+  print_string("MUL of 0xFFFFFFF * 100000 = ");
   print_result(0xFFFFFFF, 100000, mul);
-  print_string("0xFFFFFFF * 100000 = ");
+
+  print_string("MULH of 0xFFFFFFF * 100000 = ");
   print_result(0xFFFFFFF, 100000, mulh);
-  print_string("In bits:\n");
-  print_binary_result_bits(0xFFFFFFF, 100000, mul);
+  print_string("In bits (MULH - MUL):\n");
+
   print_binary_result_bits(0xFFFFFFF, 100000, mulh);
+  print_binary_result_bits(0xFFFFFFF, 100000, mul);
 
-  print_string("0xFFFFFFF * -100000 = ");
+  print_string("Testing MULH\n");
+  print_string("MUL of 0xFFFFFFF * -100000 = ");
   print_result(0xFFFFFFF, -100000, mul);
-  print_string("0xFFFFFFF * -100000 = ");
+  print_string("MULH of 0xFFFFFFF * -100000 = ");
   print_result(0xFFFFFFF, -100000, mulh);
-  print_string("In bits:\n");
-  print_binary_result_bits(0xFFFFFFF, -100000, mul);
+  print_string("In bits (MULH - MUL):\n");
   print_binary_result_bits(0xFFFFFFF, -100000, mulh);
+  print_binary_result_bits(0xFFFFFFF, -100000, mul);
 
-  print_string("-0xFFFFFFF * -100000 = ");
+  print_string("Testing MULH\n");
+  print_string("MUL of -0xFFFFFFF * -100000 = ");
   print_result(-0xFFFFFFF, -100000, mul);
-  print_string("-0xFFFFFFF * -100000 = ");
+  print_string("MULH of -0xFFFFFFF * -100000 = ");
   print_result(-0xFFFFFFF, -100000, mulh);
-  print_string("In bits:\n");
-  print_binary_result_bits(-0xFFFFFFF, -100000, mul);
+  print_string("In bits (MULH - MUL):\n");
   print_binary_result_bits(-0xFFFFFFF, -100000, mulh);
+  print_binary_result_bits(-0xFFFFFFF, -100000, mul);
+  print_string("\n");
 
   // Testing MULHU
   print_string("Testing MULHU\n");
-  print_string("0xFFFFFFF * 100000 = ");
+  print_string("MUL of 0xFFFFFFF * 100000 = ");
   print_result(0xFFFFFFF, 100000, mul);
-  print_string("0xFFFFFFF * 100000 = ");
+  print_string("MULHU of 0xFFFFFFF * 100000 = ");
   print_result(0xFFFFFFF, 100000, mulhu);
+  print_string("In bits (MULHU - MUL):\n");
+  print_binary_result_bits(0xFFFFFFF, 100000, mulhu);
+  print_binary_result_bits(0xFFFFFFF, 100000, mul);
 
   // Testing MULHSU
   print_string("Testing MULHSU\n");
-  print_string("0xFFFFFFF * 100000 = ");
+  print_string("MUL of 0xFFFFFFF * 100000 = ");
   print_result(0xFFFFFFF, 100000, mul);
-  print_string("0xFFFFFFF * 100000 = ");
+  print_string("MULHSU of 0xFFFFFFF * 100000 = ");
   print_result(0xFFFFFFF, 100000, mulhsu);
+  print_string("In bits (MULHSU - MUL):\n");
+  print_binary_result_bits(0xFFFFFFF, 100000, mulhsu);
+  print_binary_result_bits(0xFFFFFFF, 100000, mul);
 
-  print_string("-0xFFFFFFF * 100000 = ");
+  print_string("Testing MULHSU\n");
+  print_string("MUL of -0xFFFFFFF * 100000 = ");
   print_result(-0xFFFFFFF, 100000, mul);
-  print_string("-0xFFFFFFF * 100000 = ");
+  print_string("MULHSU of -0xFFFFFFF * 100000 = ");
   print_result(-0xFFFFFFF, 100000, mulhsu);
+  print_string("In bits (MULHSU - MUL):\n");
+  print_binary_result_bits(-0xFFFFFFF, 100000, mulhsu);
+  print_binary_result_bits(-0xFFFFFFF, 100000, mul);
 
   // Testing DIV
   print_string("Testing DIV:\n");
   print_string("341341 / 17 = ");
   print_result(341341, 17, div);
 
+  print_string("Testing DIV:\n");
   print_string("-341341 / 17 = ");
   print_result(-341341, 17, div);
 
+  print_string("Testing DIV:\n");
   print_string("341341 / -17 = ");
   print_result(341341, -17, div);
-  /* print_signed_as_unsigned(-20078); */
 
   // Testing DIVU
   print_string("Testing DIVU:\n");
@@ -786,17 +1002,19 @@ int main(int argc, char** argv) {
   print_string("42 % 9 = ");
   print_result(42, 9, rem);
 
+  print_string("Testing REM: ");
   print_string("-42 % 9 = ");
   print_result(-42, 9, rem);
-  /* print_signed_as_unsigned(-6); */
 
+  print_string("Testing REM: ");
   print_string("42 % -9 = ");
   print_result(42, -9, rem);
 
-  print_string("Testing REM: \n");
+  print_string("Testing REMU: \n");
   print_string("42 % 9 = ");
   print_result(42, 9, remu);
 
+  print_string("\n\nTesting U-type:\n\n");
   // Testing LUI
   print_string("Testing LUI: \n");
   print_string("1 << 12 = ");
@@ -808,6 +1026,7 @@ int main(int argc, char** argv) {
   print_unary_result(1, auipc);
 
   // Testing BEQ
+  print_string("\n\nTesting braching:\n\n");
   print_string("Testing BEQ: \n");
   print_string("Jump if 1 = 1: ");
   print_result(1, 1, beq);
@@ -910,17 +1129,106 @@ int main(int argc, char** argv) {
   print_result(2, 1, bgeu);
 
   // Test jumps
+  print_string("\n\nTesting jumps:\n\n");
   print_string("Testing JAL:\n");
   print_unary_result(1, jal);
 
   print_string("Testing JALR:\n");
   print_unary_result(1, jalr);
+  print_string("\n");
+  // Test I-types
+  print_string("\nTesting I arithmetic and logic\n\n");
+  print_string("Testing ADDI:\n");
+  print_string("101 + 1000 = ");
+  print_unary_result(101, addi);
+
+  print_string("Testing ADDI:\n");
+  print_string("-1010 + 1000 = ");
+  print_unary_result(-1010, addi);
+
+  print_string("Testing ADDI:\n");
+  print_string("101 - 1000 = ");
+  print_unary_result(101, neg_addi);
+
+  //
+  print_string("Testing ANDI:\n");
+  print_string("0b10101 + 0b1111110 = ");
+  print_unary_result_bits(21, andi);
+
+  print_string("Testing ANDI:\n");
+  print_string("0b00 + 0b1111110 = ");
+  print_unary_result_bits(0, andi);
+
+  print_string("Testing ORI:\n");
+  print_string("0b10101 + 0b100000001 = ");
+  print_unary_result_bits(21, ori);
+
+  print_string("Testing ORI:\n");
+  print_string("0b00 + 0b100000001 = ");
+  print_unary_result_bits(0, ori);
+
+  print_string("Testing XORI:\n");
+  print_string("0b10101 + 0b100000101 = ");
+  print_unary_result_bits(21, xori);
+
+  print_string("Testing XORI:\n");
+  print_string("0b1000000000 + 0b100000101 = ");
+  print_unary_result_bits(512, xori);
+
+  print_string("Testing SLLI:\n");
+  print_string("1 << 4 = ");
+  print_unary_result_bits(1, slli);
+
+  print_string("Testing SLLI:\n");
+  print_string("256 << 4 = ");
+  print_unary_result_bits(256, slli);
+
+  print_string("Testing SRLI:\n");
+  print_string("32 >> 4 = ");
+  print_unary_result_bits(32, srli);
+
+  print_string("Testing SRLI:\n");
+  print_string("256 >> 4 = ");
+  print_unary_result_bits(256, srli);
+
+  print_string("Testing SRAI:\n");
+  print_string("32 >> 4 = ");
+  print_unary_result_bits(32, srai);
+
+  print_string("Testing SRAI:\n");
+  print_string("256 >> 4 = ");
+  print_unary_result_bits(256, srai);
+
+  print_string("Testing SRAI:\n");
+  print_string("-512 >> 4 = ");
+  print_unary_result_bits(-640, srai);
+
+  // Test SLTIU
+  print_string("Testing SLTIU:\n");
+  print_string("8 < 100 is ");
+  print_unary_result(8, sltiu);
+
+  print_string("Testing SLTIU:\n");
+  print_string("101 < 100 is ");
+  print_unary_result(101, sltiu);
+
+  // Test SLTI
+  print_string("Testing SLTI:\n");
+  print_string("-200 < -100 is ");
+  print_unary_result(-200, slti);
+
+  print_string("Testing SLTI:\n");
+  print_string("-100 < -100 is ");
+  print_unary_result(-100, slti);
+
+  print_string("Testing SLTI:\n");
+  print_string("-50 < -100 is ");
+  print_unary_result(-50, slti);
+
+  print_string("Testing SLTI:\n");
+  print_string("50 < -100 is ");
+  print_unary_result(50, slti);
 
   return 0;
 }
 
-/*
- * *
- *
- *0b100111000011111111111111111101100011110000
- */

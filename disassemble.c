@@ -5,39 +5,22 @@
 #include <stdio.h>
 #include <string.h>
 
-void print_bin_uint32(uint32_t x) {
-    for (int i = 31; i >= 0; i--) {
-        putchar( (x & (1u << i)) ? '1' : '0' );
-    }
-}
+/* void print_bin_uint32(uint32_t x) { */
+/*     for (int i = 31; i >= 0; i--) { */
+/*         putchar( (x & (1u << i)) ? '1' : '0' ); */
+/*     } */
+/* } */
 
-void print_bin_uint8(uint8_t x) {
-    for (int i = 7; i >= 0; i--) {
-        putchar( (x & (1u << i)) ? '1' : '0' );
-    }
-}
+/* void print_bin_uint8(uint8_t x) { */
+/*     for (int i = 7; i >= 0; i--) { */
+/*         putchar( (x & (1u << i)) ? '1' : '0' ); */
+/*     } */
+/* } */
+
 /* typedef enum { */
-/*   FRMT_R, FRMT_I, FRMT_S, FRMT_B, FRMT_U, FRMT_J */
-/* } InstructionFormat; */
+/*   ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND */
+/* } ArithmeticType; */
 
-typedef enum {
-  ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
-} ArithmeticType;
-
-/* typedef struct { */
-/*   uint8_t opcode; */
-/*   uint8_t rd; */
-/*     char rd_string[5]; */
-/*   uint8_t funct3; */
-/*   uint8_t rs1; */
-/*     char rs1_string[5]; */
-/*   uint8_t rs2; */
-/*     char rs2_string[5]; */
-/*   uint8_t funct7; */
-/*   int32_t imm; */
-/* } DecodedInstruction; */
-
-/* int spacing = 5; */
 
 const char *registers[32] = {
     [0] = "zero", [1] = "ra",   [2] = "sp",   [3] = "gp",  [4] = "tp",
@@ -230,10 +213,14 @@ void handle_i_type(DecodedInstruction i_type_instruction, char *output) {
       break;
     case 0x05:
       imm_5bit = 1;
-      // TODO - why??
-        if ((i_type_instruction.imm >> 5) & 0x20) {
-            memcpy(result, "SRAI", 5);}
-        else memcpy(result, "SRLI", 5);
+      // It is an I-type, but with 5 bit shift amount
+      // If immediate contains a 0x20 higher up than the shift amount
+      // then it means its "funct7" is for SRAI. Else it is a SRLI.
+      if ((i_type_instruction.imm >> 5) & 0x20) {
+          memcpy(result, "SRAI", 5);
+      } else  {
+          memcpy(result, "SRLI", 5);
+      }
       break;
     default:
       memcpy(result, "IERR", 5);
@@ -276,9 +263,6 @@ DecodedInstruction disasm_s_type(uint32_t instruction) {
   uint32_t upper_bits = (instruction >> 25);
   uint32_t imm = (upper_bits << 5) | lower_bits;
   // Sign extension if imm is negative.
-  /* if (imm & 0x800) { */
-  /*   imm |= 0xFFFFF000; */
-  /* } */
   int32_t signed_imm = (int32_t) (imm << 20) >> 20;
   decoded.imm = signed_imm;
   return decoded;
@@ -324,9 +308,6 @@ DecodedInstruction disasm_b_type(uint32_t instruction) {
   uint32_t imm_4_1 = (instruction >> 8) & 0x0F;
   uint32_t imm = (imm_12 << 12) | (imm_11 << 11) | (imm_10_5 << 5) | (imm_4_1 << 1);
   // Sign extension if imm is negative.
-  /* if (imm & 0x1000) { */
-  /*   imm |= 0xFFFFE000; */
-  /* } */
   int32_t signed_imm = (int32_t) (imm << 19) >> 19;
   decoded.imm = signed_imm;
   return decoded;
@@ -375,7 +356,7 @@ DecodedInstruction disasm_u_type(uint32_t instruction) {
 
   uint32_t imm = (instruction >> 12);
   // Sign extension if imm is negative.
-  int32_t signed_imm = (int32_t)(imm << 11) >> 11;  // Sign-extend 21-bit til 32-bit
+  int32_t signed_imm = (int32_t)(imm << 11) >> 11;
   decoded.imm = signed_imm;
   return decoded;
 }
@@ -404,7 +385,7 @@ DecodedInstruction disasm_j_type(uint32_t instruction) {
   uint32_t imm_19_12 = (instruction >> 12) & 0xFF;
   uint32_t imm = (imm_20 << 20) | (imm_11 << 11) | (imm_10_1 << 1) | (imm_19_12 << 12);
   // Sign extension if imm is negative.
-  int32_t signed_imm = (int32_t)(imm << 11) >> 11;  // Sign-extend 21-bit til 32-bit
+  int32_t signed_imm = (int32_t)(imm << 11) >> 11;
   decoded.imm = signed_imm;
   return decoded;
 }
@@ -462,12 +443,10 @@ void disassemble(uint32_t addr, uint32_t instruction, char *result, size_t buf_s
     sprintf(result, "%-20s %-10s", "", "ECALL");
     break;
   default:
-    /* sprintf(result, "Error in dissambly"); */
     break;
   }
 
   if (symbol != NULL) {
-      /* sprintf(result, "%s", symbol); */
       memcpy(result, symbol, strlen(symbol));
   }
 }

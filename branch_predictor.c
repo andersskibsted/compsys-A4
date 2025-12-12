@@ -1,4 +1,5 @@
 #include "branch_predictor.h"
+#include <cstdio>
 
 
 uint32_t get_index(uint32_t addr, uint8_t number_of_bits) {
@@ -79,3 +80,13 @@ void update_gShare_bimodal_predictor(uint32_t GHR, BimodalPredictor *gShare_PHT,
   update_pht(gShare_PHT, index, prediction_result);
 }
 
+void free_pht(BimodalPredictor* pht) {
+
+  if (pht != NULL) {
+    free(pht->entry_table);
+    free(pht);
+  } else {
+    printf("PHT pointer is NULL\n");
+  }
+
+}

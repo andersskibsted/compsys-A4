@@ -11,26 +11,6 @@
 int logging = 0;
 int instruction_count = 0;
 
-/* #define LOG_INSTR(buf, size, line, addr, hex, instr, desc, jump) \ */
-/*     snprintf(buf, size, "%5d %3s %8x : %08X %-50s %10s %-30s\n", \ */
-/*              line, (jump) ? "==>" : "  ", addr, hex, instr, "", desc) */
-
-/* typedef struct { */
-/*   int rd; */
-/*   int jump_addr; */
-/* } JAL_return; */
-
-/* typedef struct { */
-/*   int branch; */
-/*   int branch_addr; */
-/* } B_return; */
-
-/* typedef struct { */
-/*   int correct; */
-/*   int wrong; */
-/* } jump_predictions_t; */
-
-
 jump_predictions_t NT_predictions = { .correct = 0, .wrong = 0};
 jump_predictions_t BTFNT_predictions = { .correct = 0, .wrong = 0};
 jump_predictions_t Bimodal_256_predictions = { .correct = 0, .wrong = 0};
@@ -98,27 +78,18 @@ int MUL(int a, int b) {
   return (int32_t)result;
 }
 
-// TODO - Look into the signed bit of these high
 // multiplications
 int MULH(int a, int b) {
-  // TODO - Check if care should be taken,
-  // since this is the high 32 bits
-  // and signed x signed...
   int64_t result = (int64_t)a * b;
   return (int32_t)(result >> 32);
 }
 
 int MULHU(uint32_t a, uint32_t b) {
-  // TODO - Check if care should be taken,
-  // since this is the high 32 bits and it is *unsigned*
   uint64_t result = (uint64_t)a * b;
   return (uint32_t)(result >> 32);
 }
 
 int MULHSU(int32_t a, uint32_t b) {
-  // TODO - Check if care should be taken,
-  // since this is the high 32 bits
-  // and it is signed x unsigned
   uint64_t result = (int64_t)a * b;
   return (int32_t)(result >> 32);
 }
@@ -131,7 +102,6 @@ int REM(int a, int b) {
   return a % b;
 }
 
-// TODO - Unsigned... Check how this is properly implemented
 unsigned int DIVU(int a, int b) {
   return (unsigned int)a / (unsigned int)b;
 }
@@ -274,7 +244,13 @@ int execute_i_type(DecodedInstruction i_type_instruction, struct memory *mem) {
       rd = XOR(rs1, imm);
       break;
     case 0x05:
-      rd = SRA(rs1, imm);
+      // Equivalent to:
+      //if (i_type_instruction.funct7 == 0x20) {
+      if ((i_type_instruction.imm >> 5) & 0x20) {
+        rd = SRA(rs1, imm);
+      } else {
+        rd = SRL(rs1, imm);
+      }
       break;
     case 0x06:
       rd = OR(rs1, imm);
@@ -307,16 +283,16 @@ int execute_s_type(DecodedInstruction s_type_instruction, struct memory *mem) {
   int store_addr = register_file[s_type_instruction.rs1] + s_type_instruction.imm;
   int rs2 = register_file[s_type_instruction.rs2];
   signed short rs2_sh = (signed short) register_file[s_type_instruction.rs2];
+  signed char rs2_sb = (signed char) register_file[s_type_instruction.rs2];
 
   switch (s_type_instruction.funct3) {
   case 0x00:
     // SB
-    memory_wr_b(mem, store_addr, rs2);
+    memory_wr_b(mem, store_addr, rs2_sb);
     store_status = 1;
     break;
   case 0x01:
     // SH
-    /* memory_wr_h(mem, store_addr, rs2); */
     memory_wr_h(mem, store_addr, rs2_sh);
     store_status = 1;
     break;
@@ -429,7 +405,6 @@ int execute_ecall() {
     exit_code = -1;
     break;
   default:
-    printf("ecall code %d\n", a7);
     printf("Unknown ecall\n");
     break;
   }
@@ -439,87 +414,6 @@ int execute_ecall() {
 int advance_addr(int addr, int step) {
   return addr + step;
 }
-
-/* // Function for logging simulation to file */
-/* int log_instruction(int instruction_count, int addr, int instruction, */
-/*                     DecodedInstruction decoded_instruction, int jump_flag, */
-/*                     FILE *log_file, void *data, struct symbols *symbols) { */
-/*   if (!logging) { */
-/*     // Logging turned off */
-/*     return -1; */
-/*   } */
-
-/*   char disassembly[100]; */
-/*   disassemble(addr, instruction, disassembly, 100, symbols); */
-/*   char buffer[200]; */
-/*   memset(buffer, 0, sizeof(buffer)); */
-
-/*   InstructionFormat format = get_format(decoded_instruction.opcode); */
-/*   int bytes_written = 0; */
-
-/*   switch (format) { */
-
-/*   case FRMT_R: */
-/*   case FRMT_I: */
-/*   case FRMT_U: { */
-/*     int result = *(int *)data; */
-/*     char description[30]; */
-/*     snprintf(description, 30, "          R[%2d] <- %x", decoded_instruction.rd, */
-/*              result); */
-/*     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, */
-/*                               disassembly, description, jump_flag); */
-/*     break; */
-/*   } */
-
-/*   case FRMT_S: { */
-/*     int store_data = register_file[decoded_instruction.rs1]; */
-/*     int store_addr = */
-/*         register_file[decoded_instruction.rs2] + decoded_instruction.imm; */
-/*     char memory[55]; */
-/*     snprintf(memory, 55, "                   %x -> Mem[%x]", store_data, */
-/*              store_addr); */
-/*     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, */
-/*                               disassembly, memory, jump_flag); */
-/*     break; */
-/*   } */
-
-/*   case FRMT_B: { */
-/*     char jump[10]; */
-/*     B_return result = *(B_return *)data; */
-/*     if (result.branch) { */
-/*       snprintf(jump, 10, "     {T}"); */
-/*     } else { */
-/*       snprintf(jump, 10, "     {_}"); */
-/*     } */
-/*     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, */
-/*                               disassembly, jump, jump_flag); */
-/*     break; */
-/*   } */
-
-/*   case FRMT_J: { */
-/*     char description[30]; */
-/*     snprintf(description, 30, "          R[%2d] <- %x", decoded_instruction.rd, */
-/*              addr + 4); */
-/*     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, */
-/*                               disassembly, description, jump_flag); */
-/*     break; */
-/*   } */
-
-/*   case ECALL: { */
-/*     bytes_written = LOG_INSTR(buffer, 200, instruction_count, addr, instruction, */
-/*                               disassembly, "", jump_flag); */
-/*     break; */
-/*   } */
-
-/*   default: { */
-/*     bytes_written = snprintf(buffer, 100, "\n"); */
-/*     break; */
-/*   } */
-/*   } */
-
-/*   fwrite(buffer, 1, bytes_written, log_file); */
-/*   return bytes_written; */
-/* } */
 
 struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct symbols *symbols) {
 
@@ -539,9 +433,6 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
   int jump_log_flag = 0;
   int terminate_execution = 0;
   // Data structures for jump prediction
-  // TODO - This can be kept op stack,
-  // maybe their entries should be free'd at end of function
-  // Bimodal predictions
   BimodalPredictor* bim_pht_256 = create_bimodal_predictor(8); // 8-bits
   BimodalPredictor* bim_pht_1024 = create_bimodal_predictor(10); // 10-bits
   BimodalPredictor* bim_pht_4096 = create_bimodal_predictor(12); // 12-bits
@@ -559,8 +450,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
   uint32_t GHR_4096 = 0;
   uint32_t GHR_16384 = 0;
   uint32_t total_predictions = 0;
-// Debug prints
-//
+
   // Read first instruction
   uint32_t instruction = memory_rd_w(mem, pc);
   // Main execution loop for instructions.
@@ -872,6 +762,17 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
   if (logging) {
     log_jump_predictions(log_file, total_predictions);
   }
+
+  // Free allocated memory for jump prediction
+  free_pht(bim_pht_256);
+  free_pht(bim_pht_1024);
+  free_pht(bim_pht_4096);
+  free_pht(bim_pht_16384);
+
+  free_pht(gs_pht_256);
+  free_pht(gs_pht_1024);
+  free_pht(gs_pht_4096);
+  free_pht(gs_pht_16384);
 
   return stat;
 
